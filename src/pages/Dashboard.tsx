@@ -21,6 +21,7 @@ import {
   Loader2
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import CameraCapture from "@/components/CameraCapture";
 
 interface Message {
   id: string;
@@ -52,15 +53,17 @@ const Dashboard = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [cameraContext, setCameraContext] = useState<'crop' | 'chat'>('crop');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const chatFileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const handleFileUpload = async (files: FileList | null) => {
+  const handleFileUpload = async (files: FileList | null, context: 'crop' | 'chat' = 'crop') => {
     if (!files) return;
 
     const file = files[0];
@@ -104,16 +107,29 @@ const Dashboard = () => {
       setUploadedFiles(prev => [newFile, ...prev]);
       setUploadProgress(100);
       
-      // Add message with uploaded image
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        type: 'user',
-        content: 'I\'ve uploaded an image for analysis',
-        timestamp: new Date(),
-        attachments: [{ name: file.name, type: file.type, url: fileUrl }],
-      };
-      
-      setMessages(prev => [...prev, userMessage]);
+      if (context === 'crop') {
+        // Add message with uploaded image for crop analysis
+        const userMessage: Message = {
+          id: Date.now().toString(),
+          type: 'user',
+          content: 'I\'ve uploaded an image for analysis',
+          timestamp: new Date(),
+          attachments: [{ name: file.name, type: file.type, url: fileUrl }],
+        };
+        
+        setMessages(prev => [...prev, userMessage]);
+      } else {
+        // Add message with attachment for chat
+        const userMessage: Message = {
+          id: Date.now().toString(),
+          type: 'user',
+          content: 'I\'ve attached an image',
+          timestamp: new Date(),
+          attachments: [{ name: file.name, type: file.type, url: fileUrl }],
+        };
+        
+        setMessages(prev => [...prev, userMessage]);
+      }
       
       // Simulate AI response
       setTimeout(() => {
@@ -139,6 +155,17 @@ const Dashboard = () => {
       
       scrollToBottom();
     }, 2000);
+  };
+
+  const handleCameraCapture = (file: File) => {
+    const fileList = new DataTransfer();
+    fileList.items.add(file);
+    handleFileUpload(fileList.files, cameraContext);
+  };
+
+  const openCamera = (context: 'crop' | 'chat') => {
+    setCameraContext(context);
+    setIsCameraOpen(true);
   };
 
   const handleSendMessage = () => {
@@ -227,7 +254,7 @@ const Dashboard = () => {
                 onClick={() => fileInputRef.current?.click()}
                 onDrop={(e) => {
                   e.preventDefault();
-                  handleFileUpload(e.dataTransfer.files);
+                  handleFileUpload(e.dataTransfer.files, 'crop');
                 }}
                 onDragOver={(e) => e.preventDefault()}
               >
@@ -272,7 +299,7 @@ const Dashboard = () => {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => cameraInputRef.current?.click()}
+                  onClick={() => openCamera('crop')}
                   className="flex items-center gap-2"
                 >
                   <Camera className="h-4 w-4" />
@@ -284,15 +311,14 @@ const Dashboard = () => {
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
-                onChange={(e) => handleFileUpload(e.target.files)}
+                onChange={(e) => handleFileUpload(e.target.files, 'crop')}
                 className="hidden"
               />
               <input
-                ref={cameraInputRef}
+                ref={chatFileInputRef}
                 type="file"
                 accept="image/*"
-                capture="environment"
-                onChange={(e) => handleFileUpload(e.target.files)}
+                onChange={(e) => handleFileUpload(e.target.files, 'chat')}
                 className="hidden"
               />
             </CardContent>
@@ -430,13 +456,23 @@ const Dashboard = () => {
               <div className="flex items-end gap-2">
                 <div className="flex-1 space-y-2">
                   <div className="flex gap-2">
-                    <Button variant="ghost" size="sm">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => chatFileInputRef.current?.click()}
+                      title="Attach file"
+                    >
                       <Paperclip className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => openCamera('chat')}
+                      title="Take photo"
+                    >
                       <Camera className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm">
+                    <Button variant="ghost" size="sm" title="Voice input (coming soon)">
                       <Mic className="h-4 w-4" />
                     </Button>
                   </div>
@@ -460,6 +496,12 @@ const Dashboard = () => {
           </Card>
         </div>
       </div>
+
+      <CameraCapture
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleCameraCapture}
+      />
     </div>
   );
 };
