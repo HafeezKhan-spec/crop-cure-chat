@@ -45,18 +45,28 @@ const Index = () => {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Button asChild size="lg" className="bg-gradient-primary hover:opacity-90 text-white border-0 px-8 py-6 text-lg animate-pulse-glow">
-              <Link to="/signup" className="flex items-center gap-2">
-                {t('home.getStarted')}
-                <ArrowRight className="h-5 w-5" />
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" className="border-white/30 text-white hover:bg-white/10 px-8 py-6 text-lg">
-              <Link to="/login">
-                {t('home.signIn')}
-              </Link>
-            </Button>
-          </div>
+  <Button 
+    asChild 
+    size="lg" 
+    className="bg-gradient-primary hover:opacity-90 text-white border-0 px-8 py-6 text-lg animate-pulse-glow transition-colors duration-300"
+  >
+    <Link to="/signup" className="flex items-center gap-2">
+      {t('home.getStarted')}
+      <ArrowRight className="h-5 w-5" />
+    </Link>
+  </Button>
+
+  <Button 
+    asChild 
+    size="lg" 
+    className="bg-green-600 text-white border-0 px-8 py-6 text-lg transition-colors duration-300 hover:bg-white hover:text-green-600"
+  >
+    <Link to="/login">
+      {t('home.signIn')}
+    </Link>
+  </Button>
+</div>
+
 
           <div className="mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
             <div className="glass p-6 rounded-2xl">
@@ -209,7 +219,7 @@ const Index = () => {
                   {t('home.startFreeTrial')}
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10 px-8 py-6 text-lg">
+              <Button asChild size="lg" variant="outline" className="border-white/30 text-black hover:bg-white/10 px-8 py-6 text-lg">
                 <Link to="/dashboard">
                   {t('home.viewDemo')}
                 </Link>
