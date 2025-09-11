@@ -20,12 +20,15 @@ import {
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { toast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
+import LanguageToggle from "./LanguageToggle";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { setTheme, theme } = useTheme();
+  const { t } = useLanguage();
   
   // Mock authentication state - replace with actual auth context
   const isAuthenticated = localStorage.getItem("authToken") !== null;
@@ -35,16 +38,16 @@ const Navbar = () => {
     localStorage.removeItem("authToken");
     localStorage.removeItem("userName");
     toast({
-      title: "Logged out successfully",
-      description: "You have been logged out of AgriClip",
+      title: t('toast.loggedOut'),
+      description: t('toast.loggedOutDesc'),
     });
     navigate("/");
   };
 
   const navigation = [
-    { name: "Home", href: "/" },
-    { name: "Dashboard", href: "/dashboard", requiresAuth: true },
-    { name: "Profile", href: "/profile", requiresAuth: true },
+    { name: t('nav.home'), href: "/" },
+    { name: t('nav.dashboard'), href: "/dashboard", requiresAuth: true },
+    { name: t('nav.profile'), href: "/profile", requiresAuth: true },
   ];
 
   const filteredNavigation = navigation.filter(
@@ -84,6 +87,9 @@ const Navbar = () => {
 
           {/* Actions */}
           <div className="flex items-center space-x-4">
+            {/* Language Toggle */}
+            <LanguageToggle />
+            
             {/* Theme Toggle */}
             <Button
               variant="ghost"
@@ -112,25 +118,25 @@ const Navbar = () => {
                 <DropdownMenuContent className="w-56" align="end">
                   <DropdownMenuItem onClick={() => navigate("/profile")}>
                     <User className="mr-2 h-4 w-4" />
-                    Profile
+                    {t('nav.profile')}
                   </DropdownMenuItem>
                   <DropdownMenuItem>
                     <Settings className="mr-2 h-4 w-4" />
-                    Settings
+                    {t('nav.settings')}
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />
-                    Logout
+                    {t('nav.logout')}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
               <div className="hidden sm:flex items-center space-x-2">
                 <Button variant="ghost" asChild>
-                  <Link to="/login">Login</Link>
+                  <Link to="/login">{t('nav.login')}</Link>
                 </Button>
                 <Button asChild>
-                  <Link to="/signup">Get Started</Link>
+                  <Link to="/signup">{t('nav.getStarted')}</Link>
                 </Button>
               </div>
             )}
@@ -164,12 +170,12 @@ const Navbar = () => {
                       <div className="pt-4 space-y-2">
                         <Button variant="ghost" className="w-full justify-start" asChild>
                           <Link to="/login" onClick={() => setIsOpen(false)}>
-                            Login
+                            {t('nav.login')}
                           </Link>
                         </Button>
                         <Button className="w-full" asChild>
                           <Link to="/signup" onClick={() => setIsOpen(false)}>
-                            Get Started
+                            {t('nav.getStarted')}
                           </Link>
                         </Button>
                       </div>

@@ -3,8 +3,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Leaf, ArrowRight, Shield, Zap, Brain, Users } from "lucide-react";
 import heroImage from "@/assets/hero-agriculture.jpg";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const Index = () => {
+  const { t } = useLanguage();
+  
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -31,27 +34,26 @@ const Index = () => {
           
           <h1 className="text-4xl md:text-6xl font-bold mb-6 leading-tight">
             <span className="gradient-text bg-gradient-to-r from-white via-accent to-primary bg-clip-text text-transparent">
-              Detect Crop Diseases
+              {t('home.title')}
             </span>
             <br />
-            <span className="text-white">with AI Precision</span>
+            <span className="text-white">{t('home.subtitle')}</span>
           </h1>
           
           <p className="text-xl md:text-2xl text-white/90 mb-8 max-w-3xl mx-auto leading-relaxed">
-            Upload crop images and get instant AI-powered disease detection, treatment recommendations, 
-            and expert agricultural guidance to protect your harvest.
+            {t('home.description')}
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Button asChild size="lg" className="bg-gradient-primary hover:opacity-90 text-white border-0 px-8 py-6 text-lg animate-pulse-glow">
               <Link to="/signup" className="flex items-center gap-2">
-                Get Started Free
+                {t('home.getStarted')}
                 <ArrowRight className="h-5 w-5" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg" className="border-white/30 text-white hover:bg-white/10 px-8 py-6 text-lg">
               <Link to="/login">
-                Sign In
+                {t('home.signIn')}
               </Link>
             </Button>
           </div>
@@ -78,10 +80,10 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="text-center mb-16 animate-fade-in">
             <h2 className="text-3xl md:text-4xl font-bold gradient-text mb-4">
-              Why Choose AgriClip?
+              {t('home.whyChoose')}
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Advanced AI technology meets practical farming solutions for modern agriculture
+              {t('home.subtitle2')}
             </p>
           </div>
 
@@ -91,11 +93,11 @@ const Index = () => {
                 <div className="mx-auto mb-4 p-3 rounded-2xl bg-gradient-primary w-fit">
                   <Brain className="h-8 w-8 text-white" />
                 </div>
-                <CardTitle className="text-xl">AI-Powered Detection</CardTitle>
+                <CardTitle className="text-xl">{t('home.aiPowered')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <CardDescription className="text-base">
-                  Advanced deep learning models trained on thousands of crop images for accurate disease identification
+                  {t('home.aiPoweredDesc')}
                 </CardDescription>
               </CardContent>
             </Card>
@@ -105,11 +107,11 @@ const Index = () => {
                 <div className="mx-auto mb-4 p-3 rounded-2xl bg-gradient-secondary w-fit">
                   <Zap className="h-8 w-8 text-primary" />
                 </div>
-                <CardTitle className="text-xl">Instant Results</CardTitle>
+                <CardTitle className="text-xl">{t('home.instantResults')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <CardDescription className="text-base">
-                  Get disease detection results in seconds with confidence scores and treatment recommendations
+                  {t('home.instantResultsDesc')}
                 </CardDescription>
               </CardContent>
             </Card>
@@ -119,11 +121,11 @@ const Index = () => {
                 <div className="mx-auto mb-4 p-3 rounded-2xl bg-gradient-primary w-fit">
                   <Shield className="h-8 w-8 text-white" />
                 </div>
-                <CardTitle className="text-xl">Expert Guidance</CardTitle>
+                <CardTitle className="text-xl">{t('home.expertGuidance')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <CardDescription className="text-base">
-                  24/7 AI assistant provides farming advice, treatment plans, and preventive measures
+                  {t('home.expertGuidanceDesc')}
                 </CardDescription>
               </CardContent>
             </Card>
@@ -133,11 +135,11 @@ const Index = () => {
                 <div className="mx-auto mb-4 p-3 rounded-2xl bg-gradient-secondary w-fit">
                   <Users className="h-8 w-8 text-primary" />
                 </div>
-                <CardTitle className="text-xl">Community Support</CardTitle>
+                <CardTitle className="text-xl">{t('home.communitySupport')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <CardDescription className="text-base">
-                  Connect with fellow farmers and agricultural experts for shared knowledge and support
+                  {t('home.communitySupportDesc')}
                 </CardDescription>
               </CardContent>
             </Card>
@@ -150,10 +152,10 @@ const Index = () => {
         <div className="container mx-auto px-4">
           <div className="text-center mb-16 animate-fade-in">
             <h2 className="text-3xl md:text-4xl font-bold gradient-text mb-4">
-              How AgriClip Works
+              {t('home.howItWorks')}
             </h2>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Simple, fast, and accurate crop disease detection in three easy steps
+              {t('home.howItWorksDesc')}
             </p>
           </div>
 
@@ -162,9 +164,9 @@ const Index = () => {
               <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center text-white text-2xl font-bold">
                 1
               </div>
-              <h3 className="text-2xl font-semibold">Upload Image</h3>
+              <h3 className="text-2xl font-semibold">{t('home.uploadImage')}</h3>
               <p className="text-muted-foreground">
-                Take a photo or upload an image of your crop using our intuitive interface
+                {t('home.uploadImageDesc')}
               </p>
             </div>
 
@@ -172,9 +174,9 @@ const Index = () => {
               <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center text-white text-2xl font-bold">
                 2
               </div>
-              <h3 className="text-2xl font-semibold">AI Analysis</h3>
+              <h3 className="text-2xl font-semibold">{t('home.aiAnalysis')}</h3>
               <p className="text-muted-foreground">
-                Our AI analyzes the image using advanced machine learning algorithms
+                {t('home.aiAnalysisDesc')}
               </p>
             </div>
 
@@ -182,9 +184,9 @@ const Index = () => {
               <div className="mx-auto w-16 h-16 bg-gradient-primary rounded-full flex items-center justify-center text-white text-2xl font-bold">
                 3
               </div>
-              <h3 className="text-2xl font-semibold">Get Results</h3>
+              <h3 className="text-2xl font-semibold">{t('home.getResults')}</h3>
               <p className="text-muted-foreground">
-                Receive instant diagnosis, treatment recommendations, and expert advice
+                {t('home.getResultsDesc')}
               </p>
             </div>
           </div>
@@ -196,20 +198,20 @@ const Index = () => {
         <div className="container mx-auto px-4 text-center">
           <div className="max-w-3xl mx-auto animate-fade-in">
             <h2 className="text-3xl md:text-4xl font-bold mb-6">
-              Ready to Protect Your Crops?
+              {t('home.readyToProtect')}
             </h2>
             <p className="text-xl text-white/90 mb-8">
-              Join thousands of farmers worldwide who trust AgriClip for crop health management
+              {t('home.joinThousands')}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button asChild size="lg" variant="secondary" className="px-8 py-6 text-lg">
                 <Link to="/signup">
-                  Start Free Trial
+                  {t('home.startFreeTrial')}
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10 px-8 py-6 text-lg">
                 <Link to="/dashboard">
-                  View Demo
+                  {t('home.viewDemo')}
                 </Link>
               </Button>
             </div>

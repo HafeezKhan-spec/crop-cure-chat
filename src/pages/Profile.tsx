@@ -27,6 +27,7 @@ import {
   Clock
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface HistoryItem {
   id: string;
@@ -39,6 +40,7 @@ interface HistoryItem {
 }
 
 const Profile = () => {
+  const { t } = useLanguage();
   const [isEditing, setIsEditing] = useState(false);
   const [profileData, setProfileData] = useState({
     name: localStorage.getItem("userName") || "John Farmer",
@@ -113,8 +115,8 @@ const Profile = () => {
     localStorage.setItem("userName", profileData.name);
     setIsEditing(false);
     toast({
-      title: "Profile updated",
-      description: "Your profile has been successfully updated.",
+      title: t('toast.profileUpdated'),
+      description: t('toast.profileUpdatedDesc'),
     });
   };
 
@@ -134,9 +136,9 @@ const Profile = () => {
   return (
     <div className="container mx-auto p-4 max-w-4xl space-y-6 animate-fade-in">
       <div className="text-center mb-6">
-        <h1 className="text-3xl font-bold gradient-text mb-2">Profile</h1>
+        <h1 className="text-3xl font-bold gradient-text mb-2">{t('profile.title')}</h1>
         <p className="text-muted-foreground">
-          Manage your account and view your AgriClip activity
+          {t('profile.subtitle')}
         </p>
       </div>
 
@@ -175,7 +177,7 @@ const Profile = () => {
                 </p>
                 <Badge variant="outline" className="bg-primary/10">
                   <Leaf className="h-3 w-3 mr-1" />
-                  Verified Farmer
+                  {t('profile.verifiedFarmer')}
                 </Badge>
               </div>
               
@@ -184,12 +186,12 @@ const Profile = () => {
               <div className="space-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">Farm Size:</span>
+                  <span className="font-medium">{t('profile.farmSize')}:</span>
                   <span className="text-muted-foreground">{profileData.farmSize}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Leaf className="h-4 w-4 text-muted-foreground" />
-                  <span className="font-medium">Primary Crops:</span>
+                  <span className="font-medium">{t('profile.primaryCrops')}:</span>
                 </div>
                 <p className="text-muted-foreground text-xs ml-6">
                   {profileData.primaryCrops}
@@ -203,24 +205,24 @@ const Profile = () => {
             <CardHeader>
               <CardTitle className="text-sm flex items-center gap-2">
                 <Award className="h-4 w-4" />
-                Activity Stats
+                {t('profile.activityStats')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Total Analyses</span>
+                <span className="text-sm text-muted-foreground">{t('profile.totalAnalyses')}</span>
                 <Badge variant="secondary">{stats.totalAnalyses}</Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Healthy Crops</span>
+                <span className="text-sm text-muted-foreground">{t('profile.healthyCrops')}</span>
                 <Badge className="bg-success text-success-foreground">{stats.healthyDetections}</Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Issues Found</span>
+                <span className="text-sm text-muted-foreground">{t('profile.issuesFound')}</span>
                 <Badge className="bg-warning text-warning-foreground">{stats.diseaseDetections}</Badge>
               </div>
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">Chat Sessions</span>
+                <span className="text-sm text-muted-foreground">{t('profile.chatSessions')}</span>
                 <Badge variant="outline">{stats.chatSessions}</Badge>
               </div>
             </CardContent>
@@ -231,17 +233,17 @@ const Profile = () => {
         <div className="lg:col-span-2">
           <Tabs defaultValue="profile" className="space-y-4">
             <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="profile">Profile Settings</TabsTrigger>
-              <TabsTrigger value="history">Activity History</TabsTrigger>
+              <TabsTrigger value="profile">{t('profile.profileSettings')}</TabsTrigger>
+              <TabsTrigger value="history">{t('profile.activityHistory')}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="profile" className="space-y-4">
               <Card className="floating-card">
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
-                    <CardTitle>Personal Information</CardTitle>
+                    <CardTitle>{t('profile.personalInformation')}</CardTitle>
                     <CardDescription>
-                      Update your profile details and preferences
+                      {t('profile.updateProfileDetails')}
                     </CardDescription>
                   </div>
                   <Button
@@ -256,13 +258,13 @@ const Profile = () => {
                     }}
                   >
                     {isEditing ? <X className="h-4 w-4" /> : <Edit3 className="h-4 w-4" />}
-                    {isEditing ? "Cancel" : "Edit"}
+                    {isEditing ? t('common.cancel') : t('common.edit')}
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-6">
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="name">Full Name</Label>
+                      <Label htmlFor="name">{t('profile.fullName')}</Label>
                       <Input
                         id="name"
                         value={profileData.name}
@@ -271,7 +273,7 @@ const Profile = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
+                      <Label htmlFor="email">{t('login.email')}</Label>
                       <Input
                         id="email"
                         type="email"
@@ -284,7 +286,7 @@ const Profile = () => {
 
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="phone">Phone Number</Label>
+                      <Label htmlFor="phone">{t('profile.phoneNumber')}</Label>
                       <Input
                         id="phone"
                         value={profileData.phone}
@@ -293,7 +295,7 @@ const Profile = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="location">Location</Label>
+                      <Label htmlFor="location">{t('profile.location')}</Label>
                       <Input
                         id="location"
                         value={profileData.location}
@@ -304,7 +306,7 @@ const Profile = () => {
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="bio">Bio</Label>
+                    <Label htmlFor="bio">{t('profile.bio')}</Label>
                     <Textarea
                       id="bio"
                       rows={3}
@@ -316,7 +318,7 @@ const Profile = () => {
 
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="farmSize">Farm Size</Label>
+                      <Label htmlFor="farmSize">{t('profile.farmSize')}</Label>
                       <Input
                         id="farmSize"
                         value={profileData.farmSize}
@@ -325,7 +327,7 @@ const Profile = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="primaryCrops">Primary Crops</Label>
+                      <Label htmlFor="primaryCrops">{t('profile.primaryCrops')}</Label>
                       <Input
                         id="primaryCrops"
                         value={profileData.primaryCrops}
@@ -339,7 +341,7 @@ const Profile = () => {
                     <div className="flex gap-2 pt-4">
                       <Button onClick={handleSaveProfile} className="bg-gradient-primary hover:opacity-90">
                         <Save className="mr-2 h-4 w-4" />
-                        Save Changes
+                        {t('profile.saveChanges')}
                       </Button>
                     </div>
                   )}
@@ -350,9 +352,9 @@ const Profile = () => {
             <TabsContent value="history" className="space-y-4">
               <Card className="floating-card">
                 <CardHeader>
-                  <CardTitle>Activity History</CardTitle>
+                  <CardTitle>{t('profile.activityHistory')}</CardTitle>
                   <CardDescription>
-                    Your recent AgriClip analyses and conversations
+                    {t('profile.recentAnalyses')}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>

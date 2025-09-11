@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, Leaf, Eye, EyeOff } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 const Login = () => {
   const [email, setEmail] = useState("");
@@ -14,6 +15,7 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,14 +27,14 @@ const Login = () => {
         localStorage.setItem("authToken", "mock-jwt-token");
         localStorage.setItem("userName", email.split("@")[0]);
         toast({
-          title: "Login successful!",
-          description: "Welcome back to AgriClip",
+          title: t('toast.loginSuccess'),
+          description: t('toast.welcomeBack'),
         });
         navigate("/dashboard");
       } else {
         toast({
-          title: "Login failed",
-          description: "Please check your credentials",
+          title: t('toast.loginFailed'),
+          description: t('toast.checkCredentials'),
           variant: "destructive",
         });
       }
@@ -49,23 +51,23 @@ const Login = () => {
               <Leaf className="h-8 w-8 text-white" />
             </div>
           </div>
-          <h1 className="text-3xl font-bold gradient-text">Welcome Back</h1>
+          <h1 className="text-3xl font-bold gradient-text">{t('login.welcomeBack')}</h1>
           <p className="text-muted-foreground">
-            Sign in to continue to AgriClip
+            {t('login.signInToContinue')}
           </p>
         </div>
 
         <Card className="floating-card">
           <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl text-center">Sign In</CardTitle>
+            <CardTitle className="text-2xl text-center">{t('login.signIn')}</CardTitle>
             <CardDescription className="text-center">
-              Enter your email and password to access your account
+              {t('login.enterCredentials')}
             </CardDescription>
           </CardHeader>
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('login.email')}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -78,12 +80,12 @@ const Login = () => {
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
+                  <Label htmlFor="password">{t('login.password')}</Label>
                   <Link
                     to="/forgot-password"
                     className="text-sm text-primary hover:text-primary/80 transition-colors"
                   >
-                    Forgot password?
+                    {t('login.forgotPassword')}
                   </Link>
                 </div>
                 <div className="relative">
@@ -121,10 +123,10 @@ const Login = () => {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
+                    {t('login.signingIn')}
                   </>
                 ) : (
-                  "Sign In"
+                  t('login.signIn')
                 )}
               </Button>
               
@@ -134,7 +136,7 @@ const Login = () => {
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
                   <span className="bg-background px-2 text-muted-foreground">
-                    or continue with
+                    {t('login.orContinueWith')}
                   </span>
                 </div>
               </div>
@@ -158,16 +160,16 @@ const Login = () => {
                     d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                   />
                 </svg>
-                Sign in with Google
+                {t('login.signInWithGoogle')}
               </Button>
 
               <p className="text-center text-sm text-muted-foreground">
-                Don't have an account?{" "}
+                {t('login.dontHaveAccount')}{" "}
                 <Link
                   to="/signup"
                   className="text-primary hover:text-primary/80 font-medium transition-colors"
                 >
-                  Sign up here
+                  {t('login.signUpHere')}
                 </Link>
               </p>
             </CardFooter>

@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import CameraCapture from "@/components/CameraCapture";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 interface Message {
   id: string;
@@ -40,6 +41,8 @@ interface UploadedFile {
 }
 
 const Dashboard = () => {
+  const { t } = useLanguage();
+  
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -72,8 +75,8 @@ const Dashboard = () => {
     // Validate file type
     if (!file.type.startsWith('image/')) {
       toast({
-        title: "Invalid file type",
-        description: "Please upload an image file (JPG, PNG, etc.)",
+        title: t('toast.invalidFileType'),
+        description: t('toast.uploadImageFile'),
         variant: "destructive",
       });
       return;
@@ -149,8 +152,8 @@ const Dashboard = () => {
       }, 1000);
 
       toast({
-        title: "Image uploaded successfully",
-        description: "AI analysis in progress...",
+        title: t('toast.imageUploaded'),
+        description: t('toast.analysisInProgress'),
       });
       
       scrollToBottom();
@@ -223,17 +226,17 @@ const Dashboard = () => {
       }
     ]);
     toast({
-      title: "Chat cleared",
-      description: "All messages have been removed",
+      title: t('toast.chatCleared'),
+      description: t('toast.chatClearedDesc'),
     });
   };
 
   return (
     <div className="container mx-auto p-4 max-w-7xl">
       <div className="mb-6 text-center animate-fade-in">
-        <h1 className="text-3xl font-bold gradient-text mb-2">AgriClip Dashboard</h1>
+        <h1 className="text-3xl font-bold gradient-text mb-2">{t('dashboard.title')}</h1>
         <p className="text-muted-foreground">
-          AI-powered crop disease detection and agricultural assistance
+          {t('dashboard.subtitle')}
         </p>
       </div>
 
@@ -244,7 +247,7 @@ const Dashboard = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Upload className="h-5 w-5 text-primary" />
-                Crop Analysis
+                {t('dashboard.cropAnalysis')}
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -264,13 +267,13 @@ const Dashboard = () => {
                   </div>
                   <div className="space-y-2">
                     <p className="text-lg font-medium">
-                      Drop your crop image here
+                      {t('dashboard.dropImage')}
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      or click to browse files
+                      {t('dashboard.clickToBrowse')}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Supports: JPG, PNG, WebP (Max 10MB)
+                      {t('dashboard.supportedFormats')}
                     </p>
                   </div>
                 </div>
@@ -280,7 +283,7 @@ const Dashboard = () => {
               {isUploading && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span>Uploading and analyzing...</span>
+                    <span>{t('dashboard.uploadingAndAnalyzing')}</span>
                     <span>{Math.round(uploadProgress)}%</span>
                   </div>
                   <Progress value={uploadProgress} className="h-2" />
@@ -295,7 +298,7 @@ const Dashboard = () => {
                   className="flex items-center gap-2"
                 >
                   <Paperclip className="h-4 w-4" />
-                  Browse Files
+                  {t('dashboard.browseFiles')}
                 </Button>
                 <Button
                   variant="outline"
@@ -303,7 +306,7 @@ const Dashboard = () => {
                   className="flex items-center gap-2"
                 >
                   <Camera className="h-4 w-4" />
-                  Take Photo
+                  {t('dashboard.takePhoto')}
                 </Button>
               </div>
 
@@ -313,6 +316,7 @@ const Dashboard = () => {
                 accept="image/*"
                 onChange={(e) => handleFileUpload(e.target.files, 'crop')}
                 className="hidden"
+                aria-label="Upload crop image"
               />
               <input
                 ref={chatFileInputRef}
@@ -320,6 +324,7 @@ const Dashboard = () => {
                 accept="image/*"
                 onChange={(e) => handleFileUpload(e.target.files, 'chat')}
                 className="hidden"
+                aria-label="Upload chat image"
               />
             </CardContent>
           </Card>
@@ -327,13 +332,13 @@ const Dashboard = () => {
           {/* Recent Uploads */}
           <Card className="floating-card">
             <CardHeader>
-              <CardTitle className="text-sm">Recent Uploads</CardTitle>
+              <CardTitle className="text-sm">{t('dashboard.recentUploads')}</CardTitle>
             </CardHeader>
             <CardContent>
               <ScrollArea className="h-32">
                 {uploadedFiles.length === 0 ? (
                   <p className="text-sm text-muted-foreground text-center py-4">
-                    No uploads yet
+                    {t('dashboard.noUploadsYet')}
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -365,7 +370,7 @@ const Dashboard = () => {
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Bot className="h-5 w-5 text-primary" />
-                  AI Assistant
+                  {t('dashboard.aiAssistant')}
                 </CardTitle>
                 <Button
                   variant="ghost"
@@ -440,7 +445,7 @@ const Dashboard = () => {
                         <div className="flex items-center gap-2">
                           <Loader2 className="h-4 w-4 animate-spin text-primary" />
                           <span className="text-sm text-muted-foreground">
-                            AI is typing...
+                            {t('dashboard.aiIsTyping')}
                           </span>
                         </div>
                       </div>
@@ -480,7 +485,7 @@ const Dashboard = () => {
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     onKeyPress={handleKeyPress}
-                    placeholder="Ask about crop diseases, farming techniques, or upload an image..."
+                    placeholder={t('dashboard.askAboutCrops')}
                     className="resize-none"
                   />
                 </div>
