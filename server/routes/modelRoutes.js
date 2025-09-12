@@ -5,6 +5,60 @@ const { authMiddleware, optionalAuth } = require('../middleware/authMiddleware')
 
 const router = express.Router();
 
+// @route   GET /model/status
+// @desc    Check the status of the model service
+// @access  Public
+router.get('/status', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const modelServiceUrl = process.env.MODEL_SERVICE_URL || 'http://localhost:8000';
+    
+    const response = await axios.get(`${modelServiceUrl}/health`);
+    
+    return res.json({
+      success: true,
+      message: 'Model service is running',
+      data: {
+        modelService: response.data
+      }
+    });
+  } catch (error) {
+    console.error('Error checking model service status:', error);
+    
+    return res.status(503).json({
+      success: false,
+      message: 'Model service is not available',
+      error: error.message
+    });
+  }
+});
+
+// @route   GET /model/diseases
+// @desc    Get list of diseases from the model service
+// @access  Public
+router.get('/diseases', async (req, res) => {
+  try {
+    const axios = require('axios');
+    const modelServiceUrl = process.env.MODEL_SERVICE_URL || 'http://localhost:8000';
+    
+    const response = await axios.get(`${modelServiceUrl}/diseases`);
+    
+    return res.json({
+      success: true,
+      message: 'Disease list retrieved successfully',
+      data: response.data.data
+    });
+  } catch (error) {
+    console.error('Error fetching disease list:', error);
+    
+    return res.status(500).json({
+      success: false,
+      message: 'Failed to retrieve disease list',
+      error: error.message
+    });
+  }
+});
+
 // @route   POST /model/classify
 // @desc    Classify crop image for disease detection
 // @access  Private
@@ -75,69 +129,43 @@ router.post('/classify', [
     upload.processingStatus = 'processing';
     await upload.save();
 
-    // TODO: Replace with FastAPI AgriClip model integration
-    // Simulate AI processing delay
-    setTimeout(async () => {
+    // Connect to FastAPI AgriClip model service
+    const axios = require('axios');
+    const FormData = require('form-data');
+    const fs = require('fs');
+    const path = require('path');
+    
+    // Get the FastAPI model service URL from environment variables
+    const modelServiceUrl = process.env.MODEL_SERVICE_URL || 'http://localhost:8000';
+    
+    // Process the image with FastAPI model
+    (async () => {
       try {
-        // Mock classification result
-        const diseases = [
-          {
-            name: 'Northern Corn Leaf Blight',
-            probability: 0.87,
-            severity: 'medium',
-            recommendations: [
-              'Apply fungicide containing azoxystrobin',
-              'Improve field drainage',
-              'Remove infected plant debris',
-              'Consider resistant varieties for next season'
-            ]
+        // Create form data for the FastAPI request
+        const formData = new FormData();
+        
+        // Get the file path
+        const filePath = path.join(__dirname, '..', upload.filePath);
+        
+        // Add the image file to form data
+        formData.append('file', fs.createReadStream(filePath));
+        
+        // Add other required fields
+        formData.append('uploadId', uploadId);
+        if (cropType) formData.append('cropType', cropType);
+        if (location) formData.append('location', location);
+        if (additionalInfo) formData.append('additionalInfo', JSON.stringify(additionalInfo));
+        
+        // Make request to FastAPI model service
+        const response = await axios.post(`${modelServiceUrl}/classify`, formData, {
+          headers: {
+            ...formData.getHeaders(),
           },
-          {
-            name: 'Bacterial Leaf Spot',
-            probability: 0.92,
-            severity: 'high',
-            recommendations: [
-              'Apply copper-based bactericide',
-              'Reduce overhead irrigation',
-              'Increase plant spacing for better air circulation',
-              'Remove and destroy infected leaves'
-            ]
-          },
-          {
-            name: 'Rust Disease',
-            probability: 0.78,
-            severity: 'low',
-            recommendations: [
-              'Apply preventive fungicide spray',
-              'Monitor weather conditions',
-              'Ensure proper plant nutrition',
-              'Remove alternate host plants nearby'
-            ]
-          },
-          {
-            name: 'Healthy',
-            probability: 0.95,
-            severity: null,
-            recommendations: [
-              'Continue current management practices',
-              'Monitor regularly for early disease signs',
-              'Maintain proper nutrition and irrigation',
-              'Keep field records for future reference'
-            ]
-          }
-        ];
-
-        const selectedDisease = diseases[Math.floor(Math.random() * diseases.length)];
-        const isHealthy = selectedDisease.name === 'Healthy';
-
-        const analysisResult = {
-          diseaseDetected: !isHealthy,
-          diseaseName: selectedDisease.name,
-          confidence: Math.floor(selectedDisease.probability * 100),
-          severity: selectedDisease.severity,
-          affectedArea: isHealthy ? 0 : Math.floor(Math.random() * 40) + 10,
-          recommendations: selectedDisease.recommendations
-        };
+        });
+        
+        // Extract the analysis result from the response
+        const { data } = response;
+        const analysisResult = data.data.classification;
 
         // Update upload with results
         await Upload.findByIdAndUpdate(uploadId, {
@@ -147,12 +175,37 @@ router.post('/classify', [
           'context.location': location,
           'context.additionalInfo': additionalInfo
         });
+        
+        // Notify client about completed analysis
+        console.log(`Classification completed for upload ${uploadId}`);
+        
+        // You could implement WebSocket notifications here
+        // to notify clients when their processing is complete
 
       } catch (error) {
         console.error('Classification processing error:', error);
+        
+        // Handle different types of errors
+        let errorMessage = 'Unknown error during classification';
+        
+        if (error.response) {
+          // The request was made and the server responded with a status code
+          // that falls out of the range of 2xx
+          console.error('FastAPI error response:', error.response.data);
+          errorMessage = error.response.data.detail || `Error ${error.response.status}: ${error.response.statusText}`;
+        } else if (error.request) {
+          // The request was made but no response was received
+          console.error('No response received from FastAPI service');
+          errorMessage = 'Model service unavailable. Please try again later.';
+        } else {
+          // Something happened in setting up the request that triggered an Error
+          console.error('Error setting up request:', error.message);
+          errorMessage = error.message;
+        }
+        
         await Upload.findByIdAndUpdate(uploadId, {
           processingStatus: 'failed',
-          processingError: error.message
+          processingError: errorMessage
         });
       }
     }, Math.floor(Math.random() * 3000) + 2000); // 2-5 second delay

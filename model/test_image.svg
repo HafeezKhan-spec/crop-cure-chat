@@ -1,0 +1,22 @@
+<svg width="400" height="400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="400" height="400" fill="#f0f8ff"/>
+  
+  <!-- Plant stem -->
+  <path d="M200,380 L200,200" stroke="#228B22" stroke-width="8" fill="none"/>
+  
+  <!-- Leaves -->
+  <path d="M200,300 C150,250 100,300 120,350" stroke="#228B22" stroke-width="4" fill="#32CD32"/>
+  <path d="M200,300 C250,250 300,300 280,350" stroke="#228B22" stroke-width="4" fill="#32CD32"/>
+  <path d="M200,250 C150,200 100,250 120,300" stroke="#228B22" stroke-width="4" fill="#32CD32"/>
+  <path d="M200,250 C250,200 300,250 280,300" stroke="#228B22" stroke-width="4" fill="#32CD32"/>
+  
+  <!-- Disease spots -->
+  <circle cx="170" cy="270" r="10" fill="#8B4513"/>
+  <circle cx="230" cy="290" r="8" fill="#8B4513"/>
+  <circle cx="150" cy="320" r="12" fill="#8B4513"/>
+  <circle cx="250" cy="250" r="9" fill="#8B4513"/>
+  
+  <!-- Text label -->
+  <text x="200" y="30" font-family="Arial" font-size="16" text-anchor="middle" fill="#000">Test Plant Disease Image</text>
+</svg>
