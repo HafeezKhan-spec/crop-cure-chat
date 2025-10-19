@@ -23,3 +23,16 @@ dist-ssr
 *.sln
 *.sw?
 .env
+
+# Python caches and virtual envs
+__pycache__/
+*.pyc
+venv/
+model/venv/
+model/__pycache__/
+
+# Hugging Face cache
+model/.hf_cache/
+
+# Local uploads (runtime data)
+server/uploads/
