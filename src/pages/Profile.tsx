@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -52,56 +52,97 @@ const Profile = () => {
     primaryCrops: "Corn, Soybeans, Wheat",
   });
 
-  const [history] = useState<HistoryItem[]>([
-    {
-      id: '1',
-      type: 'upload',
-      title: 'Corn Leaf Analysis',
-      description: 'Detected: Northern Corn Leaf Blight',
-      timestamp: new Date('2024-01-15T10:30:00'),
-      status: 'disease',
-      confidence: 87,
-    },
-    {
-      id: '2',
-      type: 'chat',
-      title: 'Soil pH Management',
-      description: 'Asked about optimal soil pH levels for soybeans',
-      timestamp: new Date('2024-01-14T15:45:00'),
-    },
-    {
-      id: '3',
-      type: 'upload',
-      title: 'Wheat Field Survey',
-      description: 'All crops appear healthy',
-      timestamp: new Date('2024-01-13T09:15:00'),
-      status: 'healthy',
-      confidence: 94,
-    },
-    {
-      id: '4',
-      type: 'chat',
-      title: 'Pest Control Query',
-      description: 'Discussed integrated pest management strategies',
-      timestamp: new Date('2024-01-12T14:20:00'),
-    },
-    {
-      id: '5',
-      type: 'upload',
-      title: 'Soybean Inspection',
-      description: 'Early signs of nutrient deficiency detected',
-      timestamp: new Date('2024-01-11T11:10:00'),
-      status: 'warning',
-      confidence: 76,
-    },
-  ]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [stats, setStats] = useState({
+    totalAnalyses: 0,
+    healthyDetections: 0,
+    diseaseDetections: 0,
+    chatSessions: 0,
+  });
 
-  const stats = {
-    totalAnalyses: 47,
-    healthyDetections: 32,
-    diseaseDetections: 12,
-    chatSessions: 23,
-  };
+  useEffect(() => {
+    const token = localStorage.getItem("authToken");
+    if (!token) return;
+
+    const fetchStatsAndHistory = async () => {
+      try {
+        // Fetch upload stats
+        const statsResp = await fetch('/api/upload/stats', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (statsResp.ok) {
+          const statsJson = await statsResp.json();
+          if (statsJson.success) {
+            setStats(prev => ({
+              ...prev,
+              totalAnalyses: statsJson.data.totalAnalyses || 0,
+              healthyDetections: statsJson.data.healthyDetections || 0,
+              diseaseDetections: statsJson.data.diseaseDetections || 0,
+            }));
+          }
+        }
+
+        // Fetch chat sessions count
+        const sessionsResp = await fetch('/api/chat/sessions', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (sessionsResp.ok) {
+          const sessionsJson = await sessionsResp.json();
+          if (sessionsJson.success) {
+            setStats(prev => ({
+              ...prev,
+              chatSessions: sessionsJson.data.sessions.length || 0,
+            }));
+          }
+        }
+
+        // Fetch upload history
+        const historyResp = await fetch('/api/upload/history?limit=50', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (historyResp.ok) {
+          const historyJson = await historyResp.json();
+          if (historyJson.success) {
+            const items: HistoryItem[] = historyJson.data.uploads.map((u: {
+              _id: string;
+              processingStatus: string;
+              analysisResult?: {
+                diseaseDetected?: boolean;
+                diseaseName?: string;
+                confidence?: number;
+              };
+              createdAt: string;
+            }) => {
+              const isCompleted = u.processingStatus === 'completed';
+              const diseaseDetected = isCompleted ? u.analysisResult?.diseaseDetected : null;
+              const status: 'healthy' | 'disease' | 'warning' | undefined =
+                isCompleted ? (diseaseDetected ? 'disease' : 'healthy') : 'warning';
+              const title = isCompleted
+                ? (diseaseDetected ? `${u.analysisResult?.diseaseName || 'Disease Detected'}` : 'Healthy Crop Analysis')
+                : 'Analysis Pending';
+              const description = isCompleted
+                ? (diseaseDetected ? `Detected: ${u.analysisResult?.diseaseName}` : 'No disease detected')
+                : `Status: ${u.processingStatus}`;
+              return {
+                id: u._id,
+                type: 'upload',
+                title,
+                description,
+                timestamp: new Date(u.createdAt),
+                status,
+                confidence: isCompleted ? u.analysisResult?.confidence ?? undefined : undefined,
+              };
+            });
+            setHistory(items);
+          }
+        }
+      } catch (err) {
+        // Ignore errors; UI remains with initial zero stats
+      }
+    };
+
+    fetchStatsAndHistory();
+  }, []);
 
   const handleInputChange = (field: string, value: string) => {
     setProfileData(prev => ({

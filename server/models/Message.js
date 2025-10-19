@@ -38,7 +38,7 @@ const messageSchema = new mongoose.Schema({
   aiResponse: {
     model: {
       type: String,
-      default: 'agriclip-v1'
+      default: 'agriclip-plantvillage-15k'
     },
     confidence: {
       type: Number,
@@ -60,7 +60,7 @@ const messageSchema = new mongoose.Schema({
     },
     conversationTopic: {
       type: String,
-      enum: ['disease_detection', 'farming_advice', 'general', 'troubleshooting']
+      enum: ['disease_detection', 'farming_advice', 'general', 'troubleshooting', 'crop_analysis']
     },
     userLocation: String,
     cropType: String,
@@ -175,7 +175,7 @@ messageSchema.statics.getConversationHistory = function(userId, sessionId, limit
 // Static method to get user's chat sessions
 messageSchema.statics.getUserSessions = function(userId, limit = 20) {
   return this.aggregate([
-    { $match: { userId: mongoose.Types.ObjectId(userId), isDeleted: false } },
+    { $match: { userId: new mongoose.Types.ObjectId(userId), isDeleted: false } },
     {
       $group: {
         _id: '$sessionId',

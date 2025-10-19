@@ -21,25 +21,48 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Mock authentication - replace with actual API call
-    setTimeout(() => {
-      if (email && password) {
-        localStorage.setItem("authToken", "mock-jwt-token");
-        localStorage.setItem("userName", email.split("@")[0]);
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          identifier: email, // Can be email or username
+          password,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Save auth token and user info
+        localStorage.setItem("authToken", data.data.token);
+        localStorage.setItem("userName", data.data.user.username);
+        
         toast({
           title: t('toast.loginSuccess'),
           description: t('toast.welcomeBack'),
         });
+        
         navigate("/dashboard");
       } else {
         toast({
           title: t('toast.loginFailed'),
-          description: t('toast.checkCredentials'),
+          description: data.message || t('toast.checkCredentials'),
           variant: "destructive",
         });
       }
+    } catch (error) {
+      console.error('Login error:', error);
+      toast({
+        title: t('toast.loginFailed'),
+        description: t('toast.serverError'),
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   return (

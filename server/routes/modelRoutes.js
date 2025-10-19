@@ -119,7 +119,7 @@ router.post('/classify', [
             affectedArea: upload.analysisResult.affectedArea,
             recommendations: upload.analysisResult.recommendations,
             processingTime: 0,
-            model: 'agriclip-v1'
+            model: 'agriclip-plantvillage-15k'
           }
         }
       });
@@ -138,14 +138,19 @@ router.post('/classify', [
     // Get the FastAPI model service URL from environment variables
     const modelServiceUrl = process.env.MODEL_SERVICE_URL || 'http://localhost:8000';
     
-    // Process the image with FastAPI model
-    (async () => {
+    // Process the image with FastAPI model after a short delay
+    setTimeout(async () => {
       try {
         // Create form data for the FastAPI request
         const formData = new FormData();
         
-        // Get the file path
-        const filePath = path.join(__dirname, '..', upload.filePath);
+        // Get the file path - fix path construction
+        const filePath = path.resolve(upload.filePath);
+        
+        // Check if file exists
+        if (!fs.existsSync(filePath)) {
+          throw new Error(`File not found: ${filePath}`);
+        }
         
         // Add the image file to form data
         formData.append('file', fs.createReadStream(filePath));
@@ -156,11 +161,14 @@ router.post('/classify', [
         if (location) formData.append('location', location);
         if (additionalInfo) formData.append('additionalInfo', JSON.stringify(additionalInfo));
         
+        console.log(`Starting classification for upload ${uploadId} with FastAPI service at ${modelServiceUrl}`);
+        
         // Make request to FastAPI model service
         const response = await axios.post(`${modelServiceUrl}/classify`, formData, {
           headers: {
             ...formData.getHeaders(),
           },
+          timeout: 30000 // 30 second timeout
         });
         
         // Extract the analysis result from the response
@@ -177,7 +185,7 @@ router.post('/classify', [
         });
         
         // Notify client about completed analysis
-        console.log(`Classification completed for upload ${uploadId}`);
+        console.log(`Classification completed for upload ${uploadId}:`, analysisResult);
         
         // You could implement WebSocket notifications here
         // to notify clients when their processing is complete

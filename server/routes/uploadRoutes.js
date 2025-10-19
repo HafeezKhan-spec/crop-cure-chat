@@ -104,55 +104,21 @@ router.post('/image', [
 
     await uploadRecord.save();
 
-    // TODO: Replace with FastAPI AgriClip model integration
-    // Simulate AI processing for crop analysis
-    if (uploadType === 'crop_analysis') {
-      setTimeout(async () => {
-        try {
-          // Mock analysis result
-          const mockAnalysis = {
-            diseaseDetected: Math.random() > 0.3, // 70% chance of disease
-            diseaseName: ['Leaf Spot', 'Rust', 'Blight', 'Healthy'][Math.floor(Math.random() * 4)],
-            confidence: Math.floor(Math.random() * 30) + 70, // 70-100%
-            severity: ['low', 'medium', 'high'][Math.floor(Math.random() * 3)],
-            affectedArea: Math.floor(Math.random() * 50) + 10, // 10-60%
-            recommendations: [
-              'Apply fungicide treatment',
-              'Improve drainage',
-              'Remove affected leaves',
-              'Monitor closely for spread'
-            ].slice(0, Math.floor(Math.random() * 3) + 1)
-          };
-
-          await Upload.findByIdAndUpdate(uploadRecord._id, {
-            analysisResult: mockAnalysis,
-            processingStatus: 'completed'
-          });
-
-        } catch (error) {
-          console.error('Mock analysis error:', error);
-          await Upload.findByIdAndUpdate(uploadRecord._id, {
-            processingStatus: 'failed',
-            processingError: error.message
-          });
-        }
-      }, 2000); // 2 second delay to simulate processing
-    }
+    // Note: Actual AI processing is handled by /api/model/classify endpoint
+    // This upload route only handles file storage, not analysis
 
     res.status(201).json({
       success: true,
       message: 'Image uploaded successfully',
       data: {
-        upload: {
-          id: uploadRecord._id,
-          filename: uploadRecord.filename,
-          originalName: uploadRecord.originalName,
-          fileSize: uploadRecord.fileSize,
-          uploadType: uploadRecord.uploadType,
-          processingStatus: uploadRecord.processingStatus,
-          createdAt: uploadRecord.createdAt,
-          fileUrl: `/uploads/${uploadRecord.filename}`
-        }
+        uploadId: uploadRecord._id,
+        filename: uploadRecord.filename,
+        originalName: uploadRecord.originalName,
+        fileSize: uploadRecord.fileSize,
+        uploadType: uploadRecord.uploadType,
+        processingStatus: uploadRecord.processingStatus,
+        createdAt: uploadRecord.createdAt,
+        fileUrl: `/uploads/${uploadRecord.filename}`
       }
     });
 
@@ -326,6 +292,42 @@ router.get('/history', authMiddleware, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Server error while retrieving upload history'
+    });
+  }
+});
+
+// @route   GET /upload/stats
+// @desc    Get user's upload/analysis activity stats
+// @access  Private
+router.get('/stats', authMiddleware, async (req, res) => {
+  try {
+    // Aggregate stats from uploads
+    const statsAgg = await Upload.getAnalysisStats(req.user._id);
+
+    const baseStats = {
+      totalAnalyses: 0,
+      healthyDetections: 0,
+      diseaseDetections: 0,
+      avgConfidence: null
+    };
+
+    const stats = statsAgg && statsAgg.length > 0 ? {
+      totalAnalyses: statsAgg[0].totalUploads || 0,
+      healthyDetections: statsAgg[0].healthyDetections || 0,
+      diseaseDetections: statsAgg[0].diseaseDetections || 0,
+      avgConfidence: typeof statsAgg[0].avgConfidence === 'number' ? Math.round(statsAgg[0].avgConfidence) : null
+    } : baseStats;
+
+    res.json({
+      success: true,
+      message: 'Upload stats retrieved successfully',
+      data: stats
+    });
+  } catch (error) {
+    console.error('Get upload stats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while retrieving upload stats'
     });
   }
 });

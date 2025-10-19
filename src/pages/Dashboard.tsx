@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,8 @@ import {
   User,
   FileText,
   Image as ImageIcon,
-  Loader2
+  Loader2,
+  Download
 } from "lucide-react";
 import { toast } from "@/hooks/use-toast";
 import CameraCapture from "@/components/CameraCapture";
@@ -38,19 +39,106 @@ interface UploadedFile {
   size: number;
   url: string;
   timestamp: Date;
+  uploadId?: string; // ID returned from server after upload
 }
 
 const Dashboard = () => {
   const { t } = useLanguage();
   
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      type: 'ai',
-      content: 'Hello! I\'m your AgriClip AI assistant. I can help you identify crop diseases, provide treatment recommendations, and answer agricultural questions. Upload an image or ask me anything!',
-      timestamp: new Date(),
-    }
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(false);
+  const [sessionId, setSessionId] = useState<string>("");
+  
+  // Fetch chat history when component mounts
+  useEffect(() => {
+    const fetchChatHistory = async () => {
+      const token = localStorage.getItem("authToken");
+      if (!token) return;
+      
+      try {
+        setIsLoadingHistory(true);
+        
+        // First check if there are any existing sessions
+        const sessionsResponse = await fetch('/api/chat/sessions', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        const sessionsData = await sessionsResponse.json();
+        
+        if (sessionsData.success && sessionsData.data.sessions.length > 0) {
+          // Use the most recent session
+          const latestSession = sessionsData.data.sessions[0];
+          setSessionId(latestSession._id);
+          
+          // Fetch messages for this session
+          const historyResponse = await fetch(`/api/chat/history/${latestSession._id}`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          
+          const historyData = await historyResponse.json();
+          
+          if (historyData.success) {
+            // Transform messages to match our interface
+            const formattedMessages = historyData.data.messages.map((msg: {
+              _id: string;
+              messageType: string;
+              content: {
+                text?: string;
+                attachments?: Array<{
+                  originalName: string;
+                  mimeType: string;
+                  fileUrl: string;
+                }>;
+              };
+              createdAt: string;
+            }) => ({
+              id: msg._id,
+              type: msg.messageType === 'user' ? 'user' : 'ai',
+              content: msg.content.text || '',
+              timestamp: new Date(msg.createdAt),
+              attachments: msg.content.attachments?.map((att: { originalName: string; mimeType: string; fileUrl: string }) => ({
+                name: att.originalName,
+                type: att.mimeType,
+                url: att.fileUrl
+              }))
+            }));
+            
+            setMessages(formattedMessages);
+          }
+        } else {
+          // No existing sessions, create a welcome message
+          setMessages([
+            {
+              id: '1',
+              type: 'ai',
+              content: 'Hello! I\'m your AgriClip AI assistant. I can help you identify crop diseases, provide treatment recommendations, and answer agricultural questions. Upload an image or ask me anything!',
+              timestamp: new Date(),
+            }
+          ]);
+}
+      } catch (error) {
+        console.error('Error fetching chat history:', error);
+        // Set default welcome message on error
+        setMessages([
+          {
+            id: '1',
+            type: 'ai',
+            content: 'Hello! I\'m your AgriClip AI assistant. I can help you identify crop diseases, provide treatment recommendations, and answer agricultural questions. Upload an image or ask me anything!',
+            timestamp: new Date(),
+          }
+        ]);
+      } finally {
+        setIsLoadingHistory(false);
+      }
+    };
+
+    fetchChatHistory();
+  }, []);
+  
   const [inputMessage, setInputMessage] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -66,11 +154,52 @@ const Dashboard = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isTyping]);
+
+  // Function to download analysis report
+  const downloadReport = (messageContent: string, timestamp: Date) => {
+    // Extract analysis data from message content
+    const reportContent = `AgriClip AI Analysis Report\n` +
+      `Generated on: ${timestamp.toLocaleString()}\n` +
+      `\n${messageContent.replace(/\*\*/g, '').replace(/🔍|🦠|🎯|⚠️|📊|💊|✅|🌱|❌/g, '')}\n\n` +
+      `Report generated by AgriClip AI - Advanced Crop Disease Detection System`;
+    
+    // Create and download the file
+    const blob = new Blob([reportContent], { type: 'text/plain' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `AgriClip_Analysis_Report_${timestamp.toISOString().split('T')[0]}_${timestamp.getTime()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Report Downloaded",
+      description: "Analysis report has been saved to your downloads folder.",
+    });
+  };
+
   const handleFileUpload = async (files: FileList | null, context: 'crop' | 'chat' = 'crop') => {
     if (!files) return;
 
     const file = files[0];
     if (!file) return;
+
+    // Check authentication
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      toast({
+        title: t('toast.authRequired'),
+        description: t('toast.loginToUpload'),
+        variant: "destructive",
+      });
+      return;
+    }
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
@@ -85,19 +214,45 @@ const Dashboard = () => {
     setIsUploading(true);
     setUploadProgress(0);
 
-    // Simulate upload progress
-    const progressInterval = setInterval(() => {
-      setUploadProgress((prev) => {
-        if (prev >= 90) {
-          clearInterval(progressInterval);
-          return 90;
-        }
-        return prev + Math.random() * 20;
-      });
-    }, 100);
+    // Create form data for file upload
+    const formData = new FormData();
+    formData.append('image', file);
+    formData.append('uploadType', context === 'crop' ? 'crop_analysis' : 'chat_attachment');
 
-    // Simulate file processing
-    setTimeout(() => {
+    try {
+      // Track upload progress
+      const progressInterval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + Math.random() * 20;
+        });
+      }, 100);
+
+      // Upload file to server
+      const uploadResponse = await fetch('/api/upload/image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      clearInterval(progressInterval);
+
+      if (!uploadResponse.ok) {
+        throw new Error('File upload failed');
+      }
+
+      const uploadData = await uploadResponse.json();
+      
+      if (!uploadData.success) {
+        throw new Error(uploadData.message || 'File upload failed');
+      }
+
+      // Create temporary URL for preview
       const fileUrl = URL.createObjectURL(file);
       const newFile: UploadedFile = {
         name: file.name,
@@ -105,59 +260,222 @@ const Dashboard = () => {
         size: file.size,
         url: fileUrl,
         timestamp: new Date(),
+        uploadId: uploadData.data.uploadId // Store the upload ID from server
       };
 
       setUploadedFiles(prev => [newFile, ...prev]);
       setUploadProgress(100);
       
-      if (context === 'crop') {
-        // Add message with uploaded image for crop analysis
-        const userMessage: Message = {
-          id: Date.now().toString(),
-          type: 'user',
-          content: 'I\'ve uploaded an image for analysis',
-          timestamp: new Date(),
-          attachments: [{ name: file.name, type: file.type, url: fileUrl }],
-        };
-        
-        setMessages(prev => [...prev, userMessage]);
-      } else {
-        // Add message with attachment for chat
-        const userMessage: Message = {
-          id: Date.now().toString(),
-          type: 'user',
-          content: 'I\'ve attached an image',
-          timestamp: new Date(),
-          attachments: [{ name: file.name, type: file.type, url: fileUrl }],
-        };
-        
-        setMessages(prev => [...prev, userMessage]);
-      }
+      // Prepare message content based on context
+      const messageContent = context === 'crop' 
+        ? 'I\'ve uploaded an image for analysis' 
+        : 'I\'ve attached an image';
       
-      // Simulate AI response
-      setTimeout(() => {
-        const aiResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          type: 'ai',
-          content: 'I\'ve analyzed your crop image. Based on the visual indicators, I can see signs of potential leaf spot disease. Here are my recommendations:\n\n🔍 **Diagnosis**: Likely bacterial leaf spot\n🎯 **Confidence**: 85%\n💊 **Treatment**: Apply copper-based fungicide\n📅 **Follow-up**: Check in 7-10 days\n\n*Note: This is an AI analysis. Please consult with an agricultural expert for confirmation.*',
-          timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, aiResponse]);
-        scrollToBottom();
-      }, 2000);
+      // Create temporary message for UI
+      const tempMessage: Message = {
+        id: Date.now().toString(),
+        type: 'user',
+        content: messageContent,
+        timestamp: new Date(),
+        attachments: [{ name: file.name, type: file.type, url: fileUrl }],
+      };
+      
+      // Add to UI immediately
+      setMessages(prev => [...prev, tempMessage]);
+      
+      // Send message with attachment to API
+      const messageResponse = await fetch('/api/chat/message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          content: {
+            text: messageContent,
+            attachments: [{
+              uploadId: uploadData.data.uploadId,
+              filename: uploadData.data.filename,
+              originalName: file.name,
+              mimeType: file.type
+            }]
+          },
+          sessionId: sessionId || undefined,
+          messageType: 'user',
+          context: {
+            conversationTopic: context === 'crop' ? 'crop_analysis' : 'general'
+          }
+        })
+      });
 
-      setTimeout(() => {
-        setIsUploading(false);
-        setUploadProgress(0);
-      }, 1000);
+      const messageData = await messageResponse.json();
+
+      if (messageData.success) {
+        // Update session ID if this is a new conversation
+        if (!sessionId) {
+          setSessionId(messageData.data.sessionId);
+        }
+        
+        // Start AI model classification
+        const classifyResponse = await fetch('/api/model/classify', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            uploadId: uploadData.data.uploadId,
+            cropType: context === 'crop' ? 'general' : undefined,
+            location: undefined,
+            additionalInfo: { messageContent }
+          })
+        });
+
+        const classifyData = await classifyResponse.json();
+        
+        if (classifyData.success) {
+          // Show processing message
+          const processingMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            type: 'ai',
+            content: '🔄 Analyzing your crop image with AgriClip AI model... This may take a few seconds.',
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, processingMessage]);
+          scrollToBottom();
+
+          // Poll for classification results
+          const pollForResults = async () => {
+            try {
+              const statusResponse = await fetch(`/api/model/classify/${uploadData.data.uploadId}/status`, {
+                headers: {
+                  'Authorization': `Bearer ${token}`
+                }
+              });
+              
+              const statusData = await statusResponse.json();
+              
+              if (statusData.success && statusData.data.status === 'completed') {
+                const classification = statusData.data.classification;
+                
+                // Create detailed AI response based on classification results
+                let analysisContent = `🔍 **AgriClip AI Analysis Complete**\n\n`;
+                
+                if (classification.diseaseDetected) {
+                  analysisContent += `🦠 **Disease Detected**: ${classification.diseaseName}\n`;
+                  analysisContent += `🎯 **Confidence**: ${classification.confidence}%\n`;
+                  
+                  if (classification.severity) {
+                    analysisContent += `⚠️ **Severity**: ${classification.severity.charAt(0).toUpperCase() + classification.severity.slice(1)}\n`;
+                  }
+                  
+                  if (classification.affectedArea) {
+                    analysisContent += `📊 **Affected Area**: ~${classification.affectedArea}%\n`;
+                  }
+                  
+                  analysisContent += `\n💊 **Recommendations**:\n`;
+                  classification.recommendations.forEach((rec: string, index: number) => {
+                    analysisContent += `${index + 1}. ${rec}\n`;
+                  });
+                } else {
+                  analysisContent += `✅ **Good News**: No disease detected!\n`;
+                  analysisContent += `🎯 **Confidence**: ${classification.confidence}%\n\n`;
+                  analysisContent += `🌱 **Recommendations**:\n`;
+                  classification.recommendations.forEach((rec: string, index: number) => {
+                    analysisContent += `${index + 1}. ${rec}\n`;
+                  });
+                }
+                
+                analysisContent += `\n*Analysis powered by AgriClip AI Model v1.0*`;
+                
+                const aiResponse: Message = {
+                  id: (Date.now() + 2).toString(),
+                  type: 'ai',
+                  content: analysisContent,
+                  timestamp: new Date(),
+                };
+                
+                // Replace processing message with actual results
+                setMessages(prev => {
+                  const filtered = prev.filter(msg => msg.id !== processingMessage.id);
+                  return [...filtered, aiResponse];
+                });
+                scrollToBottom();
+                
+              } else if (statusData.success && statusData.data.status === 'failed') {
+                const errorMessage: Message = {
+                  id: (Date.now() + 2).toString(),
+                  type: 'ai',
+                  content: `❌ **Analysis Failed**\n\nSorry, there was an error analyzing your image: ${statusData.data.error || 'Unknown error'}\n\nPlease try uploading the image again or contact support if the issue persists.`,
+                  timestamp: new Date(),
+                };
+                
+                setMessages(prev => {
+                  const filtered = prev.filter(msg => msg.id !== processingMessage.id);
+                  return [...filtered, errorMessage];
+                });
+                scrollToBottom();
+                
+              } else if (statusData.success && statusData.data.status === 'processing') {
+                // Still processing, check again in 2 seconds
+                setTimeout(pollForResults, 2000);
+              }
+              
+            } catch (error) {
+              console.error('Error polling for classification results:', error);
+              const errorMessage: Message = {
+                id: (Date.now() + 2).toString(),
+                type: 'ai',
+                content: '❌ **Analysis Error**\n\nThere was an error retrieving the analysis results. Please try again.',
+                timestamp: new Date(),
+              };
+              
+              setMessages(prev => {
+                const filtered = prev.filter(msg => msg.id !== processingMessage.id);
+                return [...filtered, errorMessage];
+              });
+              scrollToBottom();
+            }
+          };
+          
+          // Start polling after a short delay
+          setTimeout(pollForResults, 3000);
+          
+        } else {
+          // Fallback to simple response if classification fails to start
+          const fallbackMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            type: 'ai',
+            content: `❌ **Analysis Unavailable**\n\nI received your image but couldn't start the AI analysis. The image has been uploaded successfully.\n\nError: ${classifyData.message || 'Unknown error'}`,
+            timestamp: new Date(),
+          };
+          setMessages(prev => [...prev, fallbackMessage]);
+          scrollToBottom();
+        }
+      } else {
+        toast({
+          title: t('toast.error'),
+          description: messageData.message || t('toast.messageFailed'),
+          variant: "destructive",
+        });
+      }
 
       toast({
         title: t('toast.imageUploaded'),
         description: t('toast.analysisInProgress'),
       });
-      
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast({
+        title: t('toast.uploadFailed'),
+        description: error instanceof Error ? error.message : t('toast.tryAgain'),
+        variant: "destructive",
+      });
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
       scrollToBottom();
-    }, 2000);
+    }
   };
 
   const handleCameraCapture = (file: File) => {
@@ -171,9 +489,20 @@ const Dashboard = () => {
     setIsCameraOpen(true);
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputMessage.trim()) return;
 
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      toast({
+        title: "Authentication required",
+        description: "Please log in to send messages",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Create a temporary message to show immediately
     const userMessage: Message = {
       id: Date.now().toString(),
       type: 'user',
@@ -181,30 +510,115 @@ const Dashboard = () => {
       timestamp: new Date(),
     };
 
+    // Add to UI immediately for better UX
     setMessages(prev => [...prev, userMessage]);
     setInputMessage('');
     setIsTyping(true);
+    
+    try {
+      // Send message to API
+      const response = await fetch('/api/chat/message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          content: {
+            text: userMessage.content
+          },
+          sessionId: sessionId || undefined,
+          messageType: 'user',
+          context: {
+            conversationTopic: 'general'
+          }
+        })
+      });
 
-    // Simulate AI response
-    setTimeout(() => {
-      const responses = [
-        "That's a great question about crop management! Based on current agricultural best practices, I recommend...",
-        "For optimal plant health, consider these factors: soil pH, moisture levels, and nutrient balance. Would you like me to elaborate on any of these?",
-        "Disease prevention is crucial in agriculture. Regular monitoring and early intervention can save entire crops. What specific concerns do you have?",
-        "Weather conditions play a vital role in crop health. Have you noticed any recent changes in your local climate patterns?",
-      ];
+      const data = await response.json();
 
-      const aiResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'ai',
-        content: responses[Math.floor(Math.random() * responses.length)],
-        timestamp: new Date(),
-      };
-
-      setMessages(prev => [...prev, aiResponse]);
+      if (data.success) {
+        // Update session ID if this is a new conversation
+        if (!sessionId) {
+          setSessionId(data.data.sessionId);
+        }
+        
+        // Wait for AI response (the backend will generate it asynchronously)
+        // Poll for new messages after a short delay
+        setTimeout(async () => {
+          try {
+            const currentSessionId = sessionId || data.data.sessionId;
+            console.log('Polling for AI response with sessionId:', currentSessionId);
+            
+            const historyResponse = await fetch(`/api/chat/history/${currentSessionId}`, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            });
+            
+            console.log('History response status:', historyResponse.status);
+            
+            if (historyResponse.ok) {
+              const historyData = await historyResponse.json();
+              console.log('History data:', historyData);
+              
+              if (historyData.success && historyData.data.messages) {
+                // Get the latest AI message
+                const aiMessages = historyData.data.messages.filter((msg: { messageType: string }) => msg.messageType === 'ai');
+                const latestAiMessage = aiMessages[aiMessages.length - 1];
+                
+                console.log('Latest AI message:', latestAiMessage);
+                
+                if (latestAiMessage && latestAiMessage.content.text) {
+                  const aiResponse: Message = {
+                    id: latestAiMessage._id,
+                    type: 'ai',
+                    content: latestAiMessage.content.text,
+                    timestamp: new Date(latestAiMessage.createdAt),
+                  };
+                  
+                  setMessages(prev => {
+                    // Check if this AI message is already in the list
+                    const exists = prev.some(msg => msg.id === aiResponse.id);
+                    if (!exists) {
+                      return [...prev, aiResponse];
+                    }
+                    return prev;
+                  });
+                } else {
+                  console.log('No AI message found or no text content');
+                }
+              } else {
+                console.log('History data not successful or no messages');
+              }
+            } else {
+              console.error('History response not ok:', await historyResponse.text());
+            }
+          } catch (pollError) {
+            console.error('Error polling for AI response:', pollError);
+          } finally {
+            setIsTyping(false);
+            scrollToBottom();
+          }
+        }, 2000);
+        
+      } else {
+        toast({
+          title: "Failed to send message",
+          description: data.message || "Please try again",
+          variant: "destructive"
+        });
+        setIsTyping(false);
+      }
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast({
+        title: "Error",
+        description: "Failed to send message. Please try again.",
+        variant: "destructive"
+      });
       setIsTyping(false);
-      scrollToBottom();
-    }, 1500);
+    }
 
     scrollToBottom();
   };
@@ -217,18 +631,41 @@ const Dashboard = () => {
   };
 
   const clearChat = () => {
-    setMessages([
-      {
-        id: '1',
-        type: 'ai',
-        content: 'Chat cleared! How can I help you today?',
-        timestamp: new Date(),
+    const token = localStorage.getItem("authToken");
+    const performClear = async () => {
+      try {
+        if (token && sessionId) {
+          await fetch(`/api/chat/session/${sessionId}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+        }
+
+        setMessages([
+          {
+            id: '1',
+            type: 'ai',
+            content: 'Chat cleared! How can I help you today?',
+            timestamp: new Date(),
+          }
+        ]);
+        setSessionId("");
+        toast({
+          title: t('toast.chatCleared'),
+          description: t('toast.chatClearedDesc'),
+        });
+      } catch (error) {
+        toast({
+          title: "Failed to clear chat",
+          description: "Please try again.",
+          variant: "destructive"
+        });
       }
-    ]);
-    toast({
-      title: t('toast.chatCleared'),
-      description: t('toast.chatClearedDesc'),
-    });
+    };
+
+    performClear();
   };
 
   return (
@@ -364,9 +801,9 @@ const Dashboard = () => {
         </div>
 
         {/* Right Panel - AI Assistant */}
-        <div className="flex flex-col animate-slide-up">
-          <Card className="floating-card flex-1 flex flex-col">
-            <CardHeader className="pb-3">
+        <div className="flex flex-col animate-slide-up h-[calc(100vh-8rem)]">
+          <Card className="floating-card flex-1 flex flex-col h-full">
+            <CardHeader className="pb-3 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Bot className="h-5 w-5 text-primary" />
@@ -382,10 +819,10 @@ const Dashboard = () => {
                 </Button>
               </div>
             </CardHeader>
-            <Separator />
+            <Separator className="flex-shrink-0" />
             
             {/* Messages */}
-            <CardContent className="flex-1 p-0">
+            <CardContent className="flex-1 p-0 overflow-hidden">
               <ScrollArea className="h-full p-4">
                 <div className="space-y-4">
                   {messages.map((message) => (
@@ -430,6 +867,20 @@ const Dashboard = () => {
                                 ))}
                               </div>
                             )}
+                            {/* Download button for AI analysis reports */}
+                            {message.type === 'ai' && message.content.includes('AgriClip AI Analysis') && (
+                              <div className="mt-3">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => downloadReport(message.content, message.timestamp)}
+                                  className="flex items-center gap-2"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  Download Report
+                                </Button>
+                              </div>
+                            )}
                             <p className="text-xs text-muted-foreground mt-2">
                               {message.timestamp.toLocaleTimeString()}
                             </p>
@@ -456,8 +907,8 @@ const Dashboard = () => {
               </ScrollArea>
             </CardContent>
 
-            {/* Message Input */}
-            <div className="p-4 border-t">
+            {/* Message Input - Fixed at bottom */}
+            <div className="p-4 border-t bg-background flex-shrink-0">
               <div className="flex items-end gap-2">
                 <div className="flex-1 space-y-2">
                   <div className="flex gap-2">

@@ -8,8 +8,8 @@ import os
 import json
 from PIL import Image
 import io
-import random
 import time
+from agriclip_model import get_model
 
 app = FastAPI(
     title="AgriClip Model API",
@@ -40,53 +40,12 @@ class ClassificationResponse(BaseModel):
     message: str
     data: Dict[str, Any]
 
-# Mock disease database
-diseases = [
-    {
-        "name": "Northern Corn Leaf Blight",
-        "probability": 0.87,
-        "severity": "medium",
-        "recommendations": [
-            "Apply fungicide containing azoxystrobin",
-            "Improve field drainage",
-            "Remove infected plant debris",
-            "Consider resistant varieties for next season"
-        ]
-    },
-    {
-        "name": "Bacterial Leaf Spot",
-        "probability": 0.92,
-        "severity": "high",
-        "recommendations": [
-            "Apply copper-based bactericide",
-            "Reduce overhead irrigation",
-            "Increase plant spacing for better air circulation",
-            "Remove and destroy infected leaves"
-        ]
-    },
-    {
-        "name": "Rust Disease",
-        "probability": 0.78,
-        "severity": "low",
-        "recommendations": [
-            "Apply preventive fungicide spray",
-            "Monitor weather conditions",
-            "Ensure proper plant nutrition",
-            "Remove alternate host plants nearby"
-        ]
-    },
-    {
-        "name": "Healthy",
-        "probability": 0.95,
-        "severity": None,
-        "recommendations": [
-            "Continue current management practices",
-            "Monitor regularly for early disease signs",
-            "Maintain proper nutrition and irrigation",
-            "Keep field records for future reference"
-        ]
-    }
-]
+# Text-query endpoints removed; model is image-classification only
+
+# Initialize model
+print("Loading AgriClip model...")
+model = get_model()
+print("AgriClip model loaded successfully!")
 
 @app.get("/")
 async def root():
@@ -99,6 +58,8 @@ async def health_check():
         "timestamp": time.time(),
         "version": "1.0.0"
     }
+
+# Removed /text-query route
 
 @app.post("/classify", response_model=ClassificationResponse)
 async def classify_image(
@@ -113,37 +74,28 @@ async def classify_image(
         raise HTTPException(status_code=400, detail="File must be an image")
     
     try:
-        # Read and process the image
+        # Read the image
         contents = await file.read()
-        image = Image.open(io.BytesIO(contents))
         
-        # Simulate model processing time
-        time.sleep(1)
+        # Record start time for processing time calculation
+        start_time = time.time()
         
-        # Select a random disease from our mock database
-        selected_disease = random.choice(diseases)
-        is_healthy = selected_disease["name"] == "Healthy"
+        # Use the real AgriClip model for prediction
+        prediction_result = model.predict(contents)
         
-        # Create classification result
-        result = {
-            "diseaseDetected": not is_healthy,
-            "diseaseName": selected_disease["name"],
-            "confidence": int(selected_disease["probability"] * 100),
-            "severity": selected_disease["severity"],
-            "affectedArea": 0 if is_healthy else random.randint(10, 50),
-            "recommendations": selected_disease["recommendations"]
-        }
+        # Calculate processing time
+        processing_time = time.time() - start_time
         
-        # Return response
+        # Return response with real model predictions
         return {
             "success": True,
             "message": "Classification completed successfully",
             "data": {
                 "classification": {
                     "uploadId": uploadId,
-                    **result,
-                    "processingTime": 1.0,
-                    "model": "agriclip-v1"
+                    **prediction_result,
+                    "processingTime": round(processing_time, 2),
+                    "model": "agriclip-plantvillage-15k"
                 }
             }
         }
@@ -153,13 +105,16 @@ async def classify_image(
 
 @app.get("/diseases")
 async def get_diseases():
+    # Provide disease labels from the classifier config
+    label_map = getattr(model.model.config, 'id2label', {})
+    diseases_list = [
+        {"name": name} for idx, name in sorted(label_map.items(), key=lambda x: int(x[0]))
+        if 'healthy' not in name.lower()
+    ]
     return {
         "success": True,
         "data": {
-            "diseases": [{
-                "name": disease["name"],
-                "severity": disease["severity"]
-            } for disease in diseases if disease["name"] != "Healthy"]
+            "diseases": diseases_list
         }
     }
 

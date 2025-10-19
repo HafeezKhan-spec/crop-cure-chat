@@ -11,10 +11,11 @@ import { toast } from "@/hooks/use-toast";
 
 const Signup = () => {
   const [formData, setFormData] = useState({
-    fullName: "",
+    username: "",
     email: "",
     password: "",
     confirmPassword: "",
+    languagePref: "en",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -30,9 +31,9 @@ const Signup = () => {
   };
 
   const validateForm = () => {
-    if (!formData.fullName.trim()) {
+    if (!formData.username.trim()) {
       toast({
-        title: "Full name is required",
+        title: "Username is required",
         variant: "destructive",
       });
       return false;
@@ -75,17 +76,50 @@ const Signup = () => {
 
     setIsLoading(true);
 
-    // Mock registration - replace with actual API call
-    setTimeout(() => {
-      localStorage.setItem("authToken", "mock-jwt-token");
-      localStorage.setItem("userName", formData.fullName);
-      toast({
-        title: "Account created successfully!",
-        description: "Welcome to AgriClip! Let's get started.",
+    try {
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          username: formData.username,
+          email: formData.email,
+          password: formData.password,
+          languagePref: formData.languagePref
+        }),
       });
-      navigate("/dashboard");
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Save auth token and user info
+        localStorage.setItem("authToken", data.data.token);
+        localStorage.setItem("userName", data.data.user.username);
+        
+        toast({
+          title: "Account created successfully!",
+          description: "Welcome to AgriClip! Let's get started.",
+        });
+        
+        navigate("/dashboard");
+      } else {
+        toast({
+          title: "Registration failed",
+          description: data.message || "Please check your information and try again",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Signup error:', error);
+      toast({
+        title: "Registration failed",
+        description: "Server error. Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 2000);
+    }
   };
 
   const getPasswordStrength = () => {
@@ -129,13 +163,13 @@ const Signup = () => {
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="fullName">Full Name</Label>
+                <Label htmlFor="username">Username</Label>
                 <Input
-                  id="fullName"
-                  name="fullName"
+                  id="username"
+                  name="username"
                   type="text"
-                  placeholder="John Farmer"
-                  value={formData.fullName}
+                  placeholder="johndoe"
+                  value={formData.username}
                   onChange={handleInputChange}
                   required
                   className="transition-all focus:ring-2 focus:ring-primary"

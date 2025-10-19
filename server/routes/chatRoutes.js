@@ -26,7 +26,7 @@ router.post('/message', [
     .withMessage('Invalid message type'),
   body('context.conversationTopic')
     .optional()
-    .isIn(['disease_detection', 'farming_advice', 'general', 'troubleshooting'])
+    .isIn(['disease_detection', 'farming_advice', 'general', 'troubleshooting', 'crop_analysis'])
     .withMessage('Invalid conversation topic')
 ], async (req, res) => {
   try {
@@ -106,38 +106,50 @@ router.post('/message', [
 
     await message.save();
 
-    // TODO: Replace with FastAPI T5 model integration
-    // Generate AI response if this is a user message
+    // Generate AI response using AgriClip model if this is a user message
     if (messageType === 'user') {
       setTimeout(async () => {
         try {
-          // Mock AI response
-          const aiResponses = [
-            "Based on the image you've shared, I can see signs of potential leaf disease. Let me analyze this further for you.",
-            "This appears to be a common agricultural issue. Here are my recommendations for treatment and prevention.",
-            "I've analyzed your crop image. The symptoms suggest a fungal infection. Here's what you should do:",
-            "Your crops look healthy overall! However, I notice some areas that need attention. Let me guide you through the next steps.",
-            "This is an interesting case. Based on my analysis, I recommend consulting with a local agricultural expert for the best treatment approach."
-          ];
-
-          const mockResponse = aiResponses[Math.floor(Math.random() * aiResponses.length)];
-          const processingTime = Math.floor(Math.random() * 2000) + 500; // 500-2500ms
+          const axios = require('axios');
+          const modelServiceUrl = process.env.MODEL_SERVICE_URL || 'http://localhost:8000';
+          
+          let aiResponseText = '';
+          let confidence = 75;
+          let processingTime = 0;
+          const startTime = Date.now();
+          
+          // Text-query route removed; provide helpful guidance without calling model service
+          if (content.text && content.text.trim()) {
+            aiResponseText = "Thanks for your message! The AgriClip image classifier now focuses on analyzing crop images. Please upload a clear photo of the plant for disease detection and recommendations.";
+            confidence = 85;
+            processingTime = Date.now() - startTime;
+          } else if (processedAttachments.length > 0) {
+            // If there are image attachments but no text, provide image-focused response
+            aiResponseText = "I can see you've uploaded an image. For the most accurate disease analysis, the image classification system will process this separately. Feel free to ask any questions about what you're seeing in your crops!";
+            confidence = 80;
+          } else {
+            // No text or attachments
+            aiResponseText = "Hello! I'm here to help with crop disease identification and agricultural advice. You can ask me questions about plant diseases, treatments, or upload images of your crops for analysis.";
+            confidence = 85;
+          }
+          
+          processingTime = processingTime || (Date.now() - startTime);
 
           const aiMessage = new Message({
             userId: req.user._id,
             sessionId: currentSessionId,
             messageType: 'ai',
             content: {
-              text: mockResponse,
+              text: aiResponseText,
               attachments: []
             },
             aiResponse: {
-              model: 'agriclip-v1',
-              confidence: Math.floor(Math.random() * 30) + 70, // 70-100%
+              model: 'agriclip-plantvillage-15k',
+              confidence: confidence,
               processingTime,
               tokens: {
-                input: Math.floor(Math.random() * 100) + 50,
-                output: Math.floor(Math.random() * 200) + 100
+                input: content.text ? content.text.length : 0,
+                output: aiResponseText.length
               }
             },
             context: {
@@ -154,8 +166,39 @@ router.post('/message', [
 
         } catch (error) {
           console.error('AI response generation error:', error);
+          
+          // Create fallback response
+          try {
+            const fallbackMessage = new Message({
+              userId: req.user._id,
+              sessionId: currentSessionId,
+              messageType: 'ai',
+              content: {
+                text: "I apologize, but I'm experiencing some technical difficulties. Please try again in a moment, or feel free to upload an image of your crops for disease analysis.",
+                attachments: []
+              },
+              aiResponse: {
+                model: 'agriclip-plantvillage-15k',
+                confidence: 60,
+                processingTime: 1000,
+                tokens: { input: 0, output: 100 }
+              },
+              context: {
+                previousMessageId: message._id,
+                conversationTopic: 'general'
+              },
+              metadata: {
+                language: req.user.languagePref || 'en'
+              },
+              status: 'completed'
+            });
+            
+            await fallbackMessage.save();
+          } catch (fallbackError) {
+            console.error('Fallback message creation error:', fallbackError);
+          }
         }
-      }, Math.floor(Math.random() * 2000) + 1000); // 1-3 second delay
+      }, 1500); // 1.5 second delay for realistic response time
     }
 
     // Populate the message for response
