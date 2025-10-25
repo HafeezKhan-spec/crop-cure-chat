@@ -24,6 +24,18 @@ import {
 import { toast } from "@/hooks/use-toast";
 import CameraCapture from "@/components/CameraCapture";
 import { useLanguage } from "@/contexts/LanguageContext";
+import html2canvas from "html2canvas";
+import { jsPDF } from "jspdf";
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
+
+interface ClassificationResult {
+  diseaseDetected: boolean;
+  diseaseName: string;
+  confidence: number;
+  severity?: string;
+  affectedArea?: number;
+  recommendations: string[];
+}
 
 interface Message {
   id: string;
@@ -31,6 +43,7 @@ interface Message {
   content: string;
   timestamp: Date;
   attachments?: { name: string; type: string; url: string }[];
+  classification?: ClassificationResult;
 }
 
 interface UploadedFile {
@@ -393,6 +406,7 @@ const Dashboard = () => {
                   type: 'ai',
                   content: analysisContent,
                   timestamp: new Date(),
+                  classification
                 };
                 
                 // Replace processing message with actual results
@@ -838,6 +852,7 @@ const Dashboard = () => {
                             ? 'chat-bubble-user' 
                             : 'chat-bubble-ai'
                         }`}
+                        id={`message-${message.id}`}
                       >
                         <div className="flex items-start gap-2">
                           <div className="flex-shrink-0">
@@ -851,6 +866,45 @@ const Dashboard = () => {
                             <p className="text-sm whitespace-pre-wrap">
                               {message.content}
                             </p>
+                            {message.classification && (
+                              <div className="mt-3 space-y-3">
+                                <div className="flex gap-2 flex-wrap">
+                                  {message.classification.diseaseName && (
+                                    <Badge variant="secondary">Disease: {message.classification.diseaseName}</Badge>
+                                  )}
+                                  {message.classification.severity && (
+                                    <Badge variant="outline">Severity: {message.classification.severity}</Badge>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                  <div>
+                                    <p className="text-xs text-muted-foreground mb-1">Confidence</p>
+                                    <Progress value={message.classification.confidence} />
+                                  </div>
+                                  {typeof message.classification.affectedArea === 'number' && (
+                                    <div>
+                                      <p className="text-xs text-muted-foreground mb-1">Affected Area</p>
+                                      <Progress value={message.classification.affectedArea} />
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="mt-2 h-40">
+                                  <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={[
+                                      { name: 'Confidence', value: message.classification.confidence },
+                                      { name: 'Affected Area', value: message.classification.affectedArea ?? 0 },
+                                    ]}>
+                                      <CartesianGrid strokeDasharray="3 3" />
+                                      <XAxis dataKey="name" />
+                                      <YAxis domain={[0, 100]} />
+                                      <Tooltip />
+                                      <Legend />
+                                      <Bar dataKey="value" fill="#22c55e" />
+                                    </BarChart>
+                                  </ResponsiveContainer>
+                                </div>
+                              </div>
+                            )}
                             {message.attachments && (
                               <div className="mt-2 space-y-2">
                                 {message.attachments.map((attachment, index) => (
@@ -867,17 +921,26 @@ const Dashboard = () => {
                                 ))}
                               </div>
                             )}
-                            {/* Download button for AI analysis reports */}
-                            {message.type === 'ai' && message.content.includes('AgriClip AI Analysis') && (
-                              <div className="mt-3">
+                            {/* Download buttons for AI analysis reports */}
+                            {message.type === 'ai' && (
+                              <div className="mt-3 flex gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="default"
+                                  onClick={() => downloadReportPDF(message)}
+                                  className="flex items-center gap-2"
+                                >
+                                  <Download className="h-3 w-3" />
+                                  Download PDF
+                                </Button>
                                 <Button
                                   size="sm"
                                   variant="outline"
                                   onClick={() => downloadReport(message.content, message.timestamp)}
                                   className="flex items-center gap-2"
                                 >
-                                  <Download className="h-3 w-3" />
-                                  Download Report
+                                  <FileText className="h-3 w-3" />
+                                  Download TXT
                                 </Button>
                               </div>
                             )}
@@ -887,6 +950,7 @@ const Dashboard = () => {
                           </div>
                         </div>
                       </div>
+
                     </div>
                   ))}
                   
@@ -963,3 +1027,39 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
+// Function to download analysis report as PDF (text + chart)
+const downloadReportPDF = async (message: Message) => {
+  try {
+    const el = document.getElementById(`message-${message.id}`);
+    if (!el) {
+      toast({ title: "Download failed", description: "Could not find report section.", variant: "destructive" });
+      return;
+    }
+    const canvas = await html2canvas(el as HTMLElement, { scale: 2 });
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+    const imgWidth = pageWidth - 20; // margins
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    pdf.setFontSize(14);
+    pdf.text("AgriClip AI Analysis Report", 10, 15);
+    pdf.setFontSize(10);
+    pdf.text(`Generated on: ${message.timestamp.toLocaleString()}`, 10, 22);
+
+    const y = 30;
+    const availableHeight = pageHeight - y - 10;
+    const scaledHeight = imgHeight > availableHeight ? availableHeight : imgHeight;
+    const scaledWidth = imgWidth;
+
+    pdf.addImage(imgData, 'PNG', 10, y, scaledWidth, scaledHeight);
+
+    pdf.save(`AgriClip_Analysis_Report_${message.timestamp.toISOString().split('T')[0]}_${message.timestamp.getTime()}.pdf`);
+    toast({ title: "Report Downloaded", description: "PDF saved to your downloads folder." });
+  } catch (err) {
+    console.error('PDF export error', err);
+    toast({ title: "Export failed", description: "Could not generate PDF.", variant: "destructive" });
+  }
+};
