@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   User, 
   Edit3, 
@@ -59,6 +60,8 @@ const Profile = () => {
     diseaseDetections: 0,
     chatSessions: 0,
   });
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("authToken");
@@ -144,6 +147,29 @@ const Profile = () => {
     fetchStatsAndHistory();
   }, []);
 
+  const refreshStats = async () => {
+    try {
+      const token = localStorage.getItem("authToken");
+      if (!token) return;
+      const statsResp = await fetch('/api/upload/stats', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (statsResp.ok) {
+        const statsJson = await statsResp.json();
+        if (statsJson.success) {
+          setStats(prev => ({
+            ...prev,
+            totalAnalyses: statsJson.data.totalAnalyses || 0,
+            healthyDetections: statsJson.data.healthyDetections || 0,
+            diseaseDetections: statsJson.data.diseaseDetections || 0,
+          }));
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   const handleInputChange = (field: string, value: string) => {
     setProfileData(prev => ({
       ...prev,
@@ -172,6 +198,85 @@ const Profile = () => {
 
   const getStatusIcon = (type: string) => {
     return type === 'upload' ? <Upload className="h-4 w-4" /> : <MessageCircle className="h-4 w-4" />;
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds(prev => {
+      if (prev.size === history.length) return new Set();
+      return new Set(history.map(h => h.id));
+    });
+  };
+
+  const deleteItem = async (id: string) => {
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      toast({ title: "Login required", description: "Please login to delete reports", variant: "destructive" });
+      return;
+    }
+    try {
+      setIsDeleting(true);
+      const resp = await fetch(`/api/upload/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!resp.ok) throw new Error('Delete failed');
+      const json = await resp.json();
+      if (!json.success) throw new Error(json.message || 'Delete failed');
+      setHistory(prev => prev.filter(h => h.id !== id));
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      toast({ title: "Deleted", description: "Report removed from history" });
+      await refreshStats();
+    } catch (e) {
+      toast({ title: "Failed to delete", description: e instanceof Error ? e.message : "Please try again", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const deleteSelected = async () => {
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      toast({ title: "Login required", description: "Please login to delete reports", variant: "destructive" });
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) return;
+    try {
+      setIsDeleting(true);
+      const results = await Promise.allSettled(ids.map(id => fetch(`/api/upload/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })));
+      const successful = new Set<string>();
+      for (let i = 0; i < results.length; i++) {
+        const r = results[i];
+        if (r.status === 'fulfilled' && r.value.ok) {
+          const j = await r.value.json();
+          if (j.success) successful.add(ids[i]);
+        }
+      }
+      if (successful.size > 0) {
+        setHistory(prev => prev.filter(h => !successful.has(h.id)));
+        setSelectedIds(new Set());
+        toast({ title: "Deleted", description: `${successful.size} report(s) removed` });
+        await refreshStats();
+      } else {
+        toast({ title: "No deletions", description: "Could not delete selected reports", variant: "destructive" });
+      }
+    } catch (e) {
+      toast({ title: "Failed to delete", description: e instanceof Error ? e.message : "Please try again", variant: "destructive" });
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   return (
@@ -393,10 +498,32 @@ const Profile = () => {
             <TabsContent value="history" className="space-y-4">
               <Card className="floating-card">
                 <CardHeader>
-                  <CardTitle>{t('profile.activityHistory')}</CardTitle>
-                  <CardDescription>
-                    {t('profile.recentAnalyses')}
-                  </CardDescription>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle>{t('profile.activityHistory')}</CardTitle>
+                      <CardDescription>
+                        {t('profile.recentAnalyses')}
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <Checkbox
+                          checked={selectedIds.size === history.length && history.length > 0}
+                          onCheckedChange={toggleSelectAll}
+                          aria-label="Select all"
+                        />
+                        <span className="text-xs text-muted-foreground">Select all</span>
+                      </div>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={selectedIds.size === 0 || isDeleting}
+                        onClick={deleteSelected}
+                      >
+                        Delete selected
+                      </Button>
+                    </div>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-96">
@@ -408,12 +535,28 @@ const Profile = () => {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
+                              <Checkbox
+                                checked={selectedIds.has(item.id)}
+                                onCheckedChange={() => toggleSelect(item.id)}
+                                aria-label={`Select ${item.title}`}
+                              />
                               <h4 className="font-medium text-sm">{item.title}</h4>
                               {item.confidence && (
                                 <Badge variant="outline" className="text-xs">
                                   {item.confidence}% confidence
                                 </Badge>
                               )}
+                              <div className="ml-auto">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  disabled={isDeleting}
+                                  onClick={() => deleteItem(item.id)}
+                                  className="text-muted-foreground hover:text-destructive"
+                                >
+                                  Delete
+                                </Button>
+                              </div>
                             </div>
                             <p className="text-sm text-muted-foreground mb-2">
                               {item.description}

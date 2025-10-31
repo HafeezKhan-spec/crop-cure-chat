@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Upload = require('../models/Upload');
+const Message = require('../models/Message');
 const { authMiddleware, optionalAuth } = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -67,6 +68,10 @@ router.post('/classify', [
   body('uploadId')
     .isMongoId()
     .withMessage('Invalid upload ID'),
+  body('imageDomain')
+    .optional()
+    .isIn(['plant', 'livestock', 'fish'])
+    .withMessage('imageDomain must be one of plant, livestock, fish'),
   body('cropType')
     .optional()
     .trim()
@@ -76,7 +81,11 @@ router.post('/classify', [
     .optional()
     .trim()
     .isLength({ min: 1, max: 100 })
-    .withMessage('Location must be between 1 and 100 characters')
+    .withMessage('Location must be between 1 and 100 characters'),
+  body('sessionId')
+    .optional()
+    .isUUID()
+    .withMessage('Invalid session ID format')
 ], async (req, res) => {
   try {
     // Check for validation errors
@@ -89,7 +98,7 @@ router.post('/classify', [
       });
     }
 
-    const { uploadId, cropType, location, additionalInfo } = req.body;
+    const { uploadId, imageDomain, cropType, location, additionalInfo } = req.body;
 
     // Find the upload
     const upload = await Upload.findOne({
@@ -119,7 +128,7 @@ router.post('/classify', [
             affectedArea: upload.analysisResult.affectedArea,
             recommendations: upload.analysisResult.recommendations,
             processingTime: 0,
-            model: 'agriclip-plantvillage-15k'
+            model: (upload.analysisResult && upload.analysisResult.model) || 'agriclip-original'
           }
         }
       });
@@ -157,6 +166,7 @@ router.post('/classify', [
         
         // Add other required fields
         formData.append('uploadId', uploadId);
+        if (imageDomain) formData.append('imageDomain', imageDomain);
         if (cropType) formData.append('cropType', cropType);
         if (location) formData.append('location', location);
         if (additionalInfo) formData.append('additionalInfo', JSON.stringify(additionalInfo));
@@ -174,15 +184,56 @@ router.post('/classify', [
         // Extract the analysis result from the response
         const { data } = response;
         const analysisResult = data.data.classification;
+        const narrative = data.data.report || null;
 
         // Update upload with results
         await Upload.findByIdAndUpdate(uploadId, {
           analysisResult,
+          analysisNarrative: narrative,
           processingStatus: 'completed',
           'context.cropType': cropType,
           'context.location': location,
-          'context.additionalInfo': additionalInfo
+          'context.additionalInfo': additionalInfo,
+          'context.imageDomain': imageDomain
         });
+
+        // Optionally persist an AI chat message with the narrative
+        if (narrative) {
+          try {
+            const uploadDoc = await Upload.findById(uploadId);
+            const sessionId = req.body.sessionId || undefined;
+            const attachment = uploadDoc ? [{
+              uploadId: uploadDoc._id,
+              filename: uploadDoc.filename,
+              originalName: uploadDoc.originalName,
+              mimeType: uploadDoc.mimeType,
+              fileSize: uploadDoc.fileSize,
+              fileUrl: `/uploads/${uploadDoc.filename}`
+            }] : [];
+
+            const aiMessage = new Message({
+              userId: req.user._id,
+              sessionId: sessionId,
+              messageType: 'ai',
+              content: {
+                text: narrative,
+                attachments: attachment
+              },
+              aiResponse: {
+                model: analysisResult?.model || 'agriclip-plantvillage-15k',
+                confidence: analysisResult?.confidence || 0,
+                processingTime: analysisResult?.processingTime || 0
+              },
+              context: {
+                conversationTopic: 'crop_analysis'
+              },
+              status: 'completed'
+            });
+            await aiMessage.save();
+          } catch (e) {
+            console.warn('Failed to persist AI narrative message:', e.message);
+          }
+        }
         
         // Notify client about completed analysis
         console.log(`Classification completed for upload ${uploadId}:`, analysisResult);
@@ -277,6 +328,9 @@ router.get('/classify/:uploadId/status', authMiddleware, async (req, res) => {
         affectedArea: upload.analysisResult.affectedArea,
         recommendations: upload.analysisResult.recommendations
       };
+      if (upload.analysisNarrative) {
+        response.data.report = upload.analysisNarrative;
+      }
     } else if (upload.processingStatus === 'failed') {
       response.data.error = upload.processingError;
     }

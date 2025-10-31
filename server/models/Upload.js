@@ -66,6 +66,10 @@ const uploadSchema = new mongoose.Schema({
       default: null
     }
   },
+  analysisNarrative: {
+    type: String,
+    default: null
+  },
   processingStatus: {
     type: String,
     enum: ['pending', 'processing', 'completed', 'failed'],

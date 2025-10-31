@@ -118,14 +118,27 @@ router.post('/message', [
           let processingTime = 0;
           const startTime = Date.now();
           
-          // Text-query route removed; provide helpful guidance without calling model service
+          // If user provided text, call model service text-generation endpoint
           if (content.text && content.text.trim()) {
-            aiResponseText = "Thanks for your message! The AgriClip image classifier now focuses on analyzing crop images. Please upload a clear photo of the plant for disease detection and recommendations.";
-            confidence = 85;
-            processingTime = Date.now() - startTime;
+            try {
+              const axiosResp = await axios.post(`${modelServiceUrl}/text/generate`, {
+                text: content.text,
+                // Optional: tune generation params or pass defaults
+              }, { timeout: 30000 });
+
+              const gen = axiosResp.data?.data?.output || '';
+              aiResponseText = gen || "I couldn't generate a response. Please try rephrasing your question.";
+              confidence = 85; // Placeholder: model does not provide confidence
+              processingTime = Date.now() - startTime;
+            } catch (err) {
+              console.error('Text generation error:', err?.response?.data || err.message);
+              aiResponseText = "There was an error generating the response from the plant disease text model. Please try again.";
+              confidence = 50;
+              processingTime = Date.now() - startTime;
+            }
           } else if (processedAttachments.length > 0) {
             // If there are image attachments but no text, provide image-focused response
-            aiResponseText = "I can see you've uploaded an image. For the most accurate disease analysis, the image classification system will process this separately. Feel free to ask any questions about what you're seeing in your crops!";
+            aiResponseText = "I can see you've uploaded an image. For the most accurate disease analysis, the AgriClip original classifier will process this separately. Feel free to ask any questions about what you're seeing in your crops!";
             confidence = 80;
           } else {
             // No text or attachments
@@ -143,15 +156,15 @@ router.post('/message', [
               text: aiResponseText,
               attachments: []
             },
-            aiResponse: {
-              model: 'agriclip-plantvillage-15k',
-              confidence: confidence,
-              processingTime,
-              tokens: {
-                input: content.text ? content.text.length : 0,
-                output: aiResponseText.length
-              }
-            },
+              aiResponse: {
+                model: content.text && content.text.trim() ? (process.env.TEXT_MODEL_ID || 'HafeezKing/t5-plant-disease-detector-v2') : 'agriclip-original',
+                confidence: confidence,
+                processingTime,
+                tokens: {
+                  input: content.text ? content.text.length : 0,
+                  output: aiResponseText.length
+                }
+              },
             context: {
               previousMessageId: message._id,
               conversationTopic: context.conversationTopic || 'general'
@@ -178,7 +191,7 @@ router.post('/message', [
                 attachments: []
               },
               aiResponse: {
-                model: 'agriclip-plantvillage-15k',
+                model: 'agriclip-original',
                 confidence: 60,
                 processingTime: 1000,
                 tokens: { input: 0, output: 100 }

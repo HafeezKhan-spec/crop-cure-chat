@@ -6,6 +6,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import ReportModal from "@/components/ReportModal";
 import { 
   Upload, 
   Camera, 
@@ -163,6 +165,15 @@ const Dashboard = () => {
   const chatFileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Domain selection state for post-upload classification
+  const [isDomainDialogOpen, setIsDomainDialogOpen] = useState(false);
+  const [selectedDomain, setSelectedDomain] = useState<'plant' | 'livestock' | 'fish' | null>(null);
+  const [pendingUploadId, setPendingUploadId] = useState<string | null>(null);
+  const [pendingSessionId, setPendingSessionId] = useState<string | null>(null);
+  const [pendingMessageContent, setPendingMessageContent] = useState<string>('');
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reportMessageId, setReportMessageId] = useState<string | null>(null);
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -256,7 +267,35 @@ const Dashboard = () => {
       clearInterval(progressInterval);
 
       if (!uploadResponse.ok) {
-        throw new Error('File upload failed');
+        // Handle auth errors explicitly: clear session and redirect
+        if (uploadResponse.status === 401) {
+          try {
+            const errJson = await uploadResponse.json();
+            toast({
+              title: t('toast.authRequired') || 'Authentication Required',
+              description: errJson?.message || 'Your session expired. Please log in again.',
+              variant: 'destructive',
+            });
+          } catch (_) {
+            toast({
+              title: t('toast.authRequired') || 'Authentication Required',
+              description: 'Your session expired. Please log in again.',
+              variant: 'destructive',
+            });
+          }
+          localStorage.removeItem('authToken');
+          localStorage.removeItem('userName');
+          // Redirect to login/home
+          window.location.href = '/';
+          return;
+        }
+        // For other errors, try to surface server message
+        try {
+          const errJson = await uploadResponse.json();
+          throw new Error(errJson?.message || 'File upload failed');
+        } catch (_) {
+          throw new Error('File upload failed');
+        }
       }
 
       const uploadData = await uploadResponse.json();
@@ -328,144 +367,11 @@ const Dashboard = () => {
         if (!sessionId) {
           setSessionId(messageData.data.sessionId);
         }
-        
-        // Start AI model classification
-        const classifyResponse = await fetch('/api/model/classify', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            uploadId: uploadData.data.uploadId,
-            cropType: context === 'crop' ? 'general' : undefined,
-            location: undefined,
-            additionalInfo: { messageContent }
-          })
-        });
-
-        const classifyData = await classifyResponse.json();
-        
-        if (classifyData.success) {
-          // Show processing message
-          const processingMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            type: 'ai',
-            content: '🔄 Analyzing your crop image with AgriClip AI model... This may take a few seconds.',
-            timestamp: new Date(),
-          };
-          setMessages(prev => [...prev, processingMessage]);
-          scrollToBottom();
-
-          // Poll for classification results
-          const pollForResults = async () => {
-            try {
-              const statusResponse = await fetch(`/api/model/classify/${uploadData.data.uploadId}/status`, {
-                headers: {
-                  'Authorization': `Bearer ${token}`
-                }
-              });
-              
-              const statusData = await statusResponse.json();
-              
-              if (statusData.success && statusData.data.status === 'completed') {
-                const classification = statusData.data.classification;
-                
-                // Create detailed AI response based on classification results
-                let analysisContent = `🔍 **AgriClip AI Analysis Complete**\n\n`;
-                
-                if (classification.diseaseDetected) {
-                  analysisContent += `🦠 **Disease Detected**: ${classification.diseaseName}\n`;
-                  analysisContent += `🎯 **Confidence**: ${classification.confidence}%\n`;
-                  
-                  if (classification.severity) {
-                    analysisContent += `⚠️ **Severity**: ${classification.severity.charAt(0).toUpperCase() + classification.severity.slice(1)}\n`;
-                  }
-                  
-                  if (classification.affectedArea) {
-                    analysisContent += `📊 **Affected Area**: ~${classification.affectedArea}%\n`;
-                  }
-                  
-                  analysisContent += `\n💊 **Recommendations**:\n`;
-                  classification.recommendations.forEach((rec: string, index: number) => {
-                    analysisContent += `${index + 1}. ${rec}\n`;
-                  });
-                } else {
-                  analysisContent += `✅ **Good News**: No disease detected!\n`;
-                  analysisContent += `🎯 **Confidence**: ${classification.confidence}%\n\n`;
-                  analysisContent += `🌱 **Recommendations**:\n`;
-                  classification.recommendations.forEach((rec: string, index: number) => {
-                    analysisContent += `${index + 1}. ${rec}\n`;
-                  });
-                }
-                
-                analysisContent += `\n*Analysis powered by AgriClip AI Model v1.0*`;
-                
-                const aiResponse: Message = {
-                  id: (Date.now() + 2).toString(),
-                  type: 'ai',
-                  content: analysisContent,
-                  timestamp: new Date(),
-                  classification
-                };
-                
-                // Replace processing message with actual results
-                setMessages(prev => {
-                  const filtered = prev.filter(msg => msg.id !== processingMessage.id);
-                  return [...filtered, aiResponse];
-                });
-                scrollToBottom();
-                
-              } else if (statusData.success && statusData.data.status === 'failed') {
-                const errorMessage: Message = {
-                  id: (Date.now() + 2).toString(),
-                  type: 'ai',
-                  content: `❌ **Analysis Failed**\n\nSorry, there was an error analyzing your image: ${statusData.data.error || 'Unknown error'}\n\nPlease try uploading the image again or contact support if the issue persists.`,
-                  timestamp: new Date(),
-                };
-                
-                setMessages(prev => {
-                  const filtered = prev.filter(msg => msg.id !== processingMessage.id);
-                  return [...filtered, errorMessage];
-                });
-                scrollToBottom();
-                
-              } else if (statusData.success && statusData.data.status === 'processing') {
-                // Still processing, check again in 2 seconds
-                setTimeout(pollForResults, 2000);
-              }
-              
-            } catch (error) {
-              console.error('Error polling for classification results:', error);
-              const errorMessage: Message = {
-                id: (Date.now() + 2).toString(),
-                type: 'ai',
-                content: '❌ **Analysis Error**\n\nThere was an error retrieving the analysis results. Please try again.',
-                timestamp: new Date(),
-              };
-              
-              setMessages(prev => {
-                const filtered = prev.filter(msg => msg.id !== processingMessage.id);
-                return [...filtered, errorMessage];
-              });
-              scrollToBottom();
-            }
-          };
-          
-          // Start polling after a short delay
-          setTimeout(pollForResults, 3000);
-          
-        } else {
-          // Fallback to simple response if classification fails to start
-          const fallbackMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            type: 'ai',
-            content: `❌ **Analysis Unavailable**\n\nI received your image but couldn't start the AI analysis. The image has been uploaded successfully.\n\nError: ${classifyData.message || 'Unknown error'}`,
-            timestamp: new Date(),
-          };
-          setMessages(prev => [...prev, fallbackMessage]);
-          scrollToBottom();
-        }
+        // Store pending classification info and open domain selection dialog
+        setPendingUploadId(uploadData.data.uploadId);
+        setPendingSessionId(sessionId || messageData.data.sessionId);
+        setPendingMessageContent(messageContent);
+        setIsDomainDialogOpen(true);
       } else {
         toast({
           title: t('toast.error'),
@@ -488,6 +394,137 @@ const Dashboard = () => {
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
+      scrollToBottom();
+    }
+  };
+
+  // Trigger classification with selected domain
+  const startClassification = async (domain: 'plant' | 'livestock' | 'fish') => {
+    const token = localStorage.getItem("authToken");
+    if (!token || !pendingUploadId) return;
+
+    setIsDomainDialogOpen(false);
+    setSelectedDomain(domain);
+
+    const classifyResponse = await fetch('/api/model/classify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({
+        uploadId: pendingUploadId,
+        imageDomain: domain,
+        cropType: domain === 'plant' ? 'general' : undefined,
+        location: undefined,
+        additionalInfo: { messageContent: pendingMessageContent },
+        sessionId: pendingSessionId || undefined
+      })
+    });
+
+    const classifyData = await classifyResponse.json();
+
+    if (classifyData.success) {
+      const domainLabel = domain === 'plant' ? 'crop' : domain === 'livestock' ? 'livestock' : 'fish';
+      const processingMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: `🔄 Analyzing your ${domainLabel} image with AgriClip AI model... This may take a few seconds.`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, processingMessage]);
+      scrollToBottom();
+
+      // Poll for classification results
+      const pollForResults = async () => {
+        try {
+          const statusResponse = await fetch(`/api/model/classify/${pendingUploadId}/status`, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          });
+
+          const statusData = await statusResponse.json();
+
+          if (statusData.success && statusData.data.status === 'completed') {
+            const classification = statusData.data.classification;
+            const report = statusData.data.report as string | undefined;
+
+            const analysisContent = report ? report : JSON.stringify(classification, null, 2);
+
+            const aiResponse: Message = {
+              id: (Date.now() + 2).toString(),
+              type: 'ai',
+              content: analysisContent,
+              timestamp: new Date(),
+              classification,
+              // Use the requested domain directly to avoid stale state
+              domain
+            };
+
+            setMessages(prev => {
+              const filtered = prev.filter(msg => msg.id !== processingMessage.id);
+              return [...filtered, aiResponse];
+            });
+            scrollToBottom();
+
+            // Clear pending state
+            setPendingUploadId(null);
+            setPendingSessionId(null);
+            setPendingMessageContent('');
+
+          } else if (statusData.success && statusData.data.status === 'failed') {
+            const errorMessage: Message = {
+              id: (Date.now() + 2).toString(),
+              type: 'ai',
+              content: `❌ **Analysis Failed**\n\nSorry, there was an error analyzing your image: ${statusData.data.error || 'Unknown error'}\n\nPlease try uploading the image again or contact support if the issue persists.`,
+              timestamp: new Date(),
+            };
+
+            setMessages(prev => {
+              const filtered = prev.filter(msg => msg.id !== processingMessage.id);
+              return [...filtered, errorMessage];
+            });
+            scrollToBottom();
+
+            setPendingUploadId(null);
+            setPendingSessionId(null);
+            setPendingMessageContent('');
+
+          } else if (statusData.success && statusData.data.status === 'processing') {
+            setTimeout(pollForResults, 2000);
+          }
+
+        } catch (error) {
+          console.error('Error polling for classification results:', error);
+          const errorMessage: Message = {
+            id: (Date.now() + 2).toString(),
+            type: 'ai',
+            content: '❌ **Analysis Error**\n\nThere was an error retrieving the analysis results. Please try again.',
+            timestamp: new Date(),
+          };
+
+          setMessages(prev => {
+            const filtered = prev.filter(msg => msg.id !== processingMessage.id);
+            return [...filtered, errorMessage];
+          });
+          scrollToBottom();
+
+          setPendingUploadId(null);
+          setPendingSessionId(null);
+          setPendingMessageContent('');
+        }
+      };
+
+      setTimeout(pollForResults, 3000);
+    } else {
+      const fallbackMessage: Message = {
+        id: (Date.now() + 1).toString(),
+        type: 'ai',
+        content: `❌ **Analysis Unavailable**\n\nI received your image but couldn't start the AI analysis. The image has been uploaded successfully.\n\nError: ${classifyData.message || 'Unknown error'}`,
+        timestamp: new Date(),
+      };
+      setMessages(prev => [...prev, fallbackMessage]);
       scrollToBottom();
     }
   };
@@ -558,63 +595,71 @@ const Dashboard = () => {
         }
         
         // Wait for AI response (the backend will generate it asynchronously)
-        // Poll for new messages after a short delay
-        setTimeout(async () => {
+        // Poll for new messages with retries to avoid missing slower generations
+        const currentSessionId = sessionId || data.data.sessionId;
+        let attempts = 0;
+        const maxAttempts = 12; // ~12 seconds total
+        const pollIntervalMs = 1000;
+
+        const pollForAiResponse = async () => {
+          attempts += 1;
           try {
-            const currentSessionId = sessionId || data.data.sessionId;
-            console.log('Polling for AI response with sessionId:', currentSessionId);
-            
+            console.log(`Polling AI response (attempt ${attempts}) for sessionId:`, currentSessionId);
             const historyResponse = await fetch(`/api/chat/history/${currentSessionId}`, {
               headers: {
                 'Authorization': `Bearer ${token}`
               }
             });
-            
-            console.log('History response status:', historyResponse.status);
-            
-            if (historyResponse.ok) {
-              const historyData = await historyResponse.json();
-              console.log('History data:', historyData);
-              
-              if (historyData.success && historyData.data.messages) {
-                // Get the latest AI message
-                const aiMessages = historyData.data.messages.filter((msg: { messageType: string }) => msg.messageType === 'ai');
-                const latestAiMessage = aiMessages[aiMessages.length - 1];
-                
-                console.log('Latest AI message:', latestAiMessage);
-                
-                if (latestAiMessage && latestAiMessage.content.text) {
-                  const aiResponse: Message = {
-                    id: latestAiMessage._id,
-                    type: 'ai',
-                    content: latestAiMessage.content.text,
-                    timestamp: new Date(latestAiMessage.createdAt),
-                  };
-                  
-                  setMessages(prev => {
-                    // Check if this AI message is already in the list
-                    const exists = prev.some(msg => msg.id === aiResponse.id);
-                    if (!exists) {
-                      return [...prev, aiResponse];
-                    }
-                    return prev;
-                  });
-                } else {
-                  console.log('No AI message found or no text content');
-                }
-              } else {
-                console.log('History data not successful or no messages');
-              }
-            } else {
+
+            if (!historyResponse.ok) {
               console.error('History response not ok:', await historyResponse.text());
+              throw new Error('History fetch failed');
+            }
+
+            const historyData = await historyResponse.json();
+            if (historyData.success && historyData.data.messages) {
+              const aiMessages = historyData.data.messages.filter((msg: { messageType: string }) => msg.messageType === 'ai');
+              const latestAiMessage = aiMessages[aiMessages.length - 1];
+
+              if (latestAiMessage && latestAiMessage.content?.text) {
+                const aiResponse: Message = {
+                  id: latestAiMessage._id,
+                  type: 'ai',
+                  content: latestAiMessage.content.text,
+                  timestamp: new Date(latestAiMessage.createdAt),
+                };
+
+                setMessages(prev => {
+                  const exists = prev.some(msg => msg.id === aiResponse.id);
+                  return exists ? prev : [...prev, aiResponse];
+                });
+
+                setIsTyping(false);
+                scrollToBottom();
+                return; // Stop polling after receiving AI message
+              }
+            }
+
+            if (attempts < maxAttempts) {
+              setTimeout(pollForAiResponse, pollIntervalMs);
+            } else {
+              console.warn('AI response not received within expected time window');
+              setIsTyping(false);
+              scrollToBottom();
             }
           } catch (pollError) {
             console.error('Error polling for AI response:', pollError);
-          } finally {
-            setIsTyping(false);
-            scrollToBottom();
+            if (attempts < maxAttempts) {
+              setTimeout(pollForAiResponse, pollIntervalMs);
+            } else {
+              setIsTyping(false);
+              scrollToBottom();
+            }
           }
-        }, 2000);
+        };
+
+        // Initial delay to give backend a head start
+        setTimeout(pollForAiResponse, 1500);
         
       } else {
         toast({
@@ -870,18 +915,18 @@ const Dashboard = () => {
                               <div className="mt-3 space-y-3">
                                 <div className="flex gap-2 flex-wrap">
                                   {message.classification.diseaseName && (
-                                    <Badge variant="secondary">Disease: {message.classification.diseaseName}</Badge>
+                                    <Badge variant="secondary">{message.domain === 'plant' ? 'Disease' : 'Name'}: {message.classification.diseaseName}</Badge>
                                   )}
-                                  {message.classification.severity && (
+                                  {message.domain === 'plant' && message.classification.severity && (
                                     <Badge variant="outline">Severity: {message.classification.severity}</Badge>
                                   )}
                                 </div>
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className={`grid ${message.domain === 'plant' ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
                                   <div>
                                     <p className="text-xs text-muted-foreground mb-1">Confidence</p>
                                     <Progress value={message.classification.confidence} />
                                   </div>
-                                  {typeof message.classification.affectedArea === 'number' && (
+                                  {message.domain === 'plant' && typeof message.classification.affectedArea === 'number' && (
                                     <div>
                                       <p className="text-xs text-muted-foreground mb-1">Affected Area</p>
                                       <Progress value={message.classification.affectedArea} />
@@ -890,10 +935,16 @@ const Dashboard = () => {
                                 </div>
                                 <div className="mt-2 h-40">
                                   <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={[
-                                      { name: 'Confidence', value: message.classification.confidence },
-                                      { name: 'Affected Area', value: message.classification.affectedArea ?? 0 },
-                                    ]}>
+                                    <BarChart data={
+                                      message.domain === 'plant'
+                                        ? [
+                                            { name: 'Confidence', value: message.classification.confidence },
+                                            { name: 'Affected Area', value: message.classification.affectedArea ?? 0 },
+                                          ]
+                                        : [
+                                            { name: 'Confidence', value: message.classification.confidence },
+                                          ]
+                                    }>
                                       <CartesianGrid strokeDasharray="3 3" />
                                       <XAxis dataKey="name" />
                                       <YAxis domain={[0, 100]} />
@@ -921,27 +972,23 @@ const Dashboard = () => {
                                 ))}
                               </div>
                             )}
-                            {/* Download buttons for AI analysis reports */}
+                            {/* Download & View Report buttons for AI analysis */}
                             {message.type === 'ai' && (
                               <div className="mt-3 flex gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="default"
-                                  onClick={() => downloadReportPDF(message)}
-                                  className="flex items-center gap-2"
-                                >
-                                  <Download className="h-3 w-3" />
-                                  Download PDF
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => downloadReport(message.content, message.timestamp)}
-                                  className="flex items-center gap-2"
-                                >
-                                  <FileText className="h-3 w-3" />
-                                  Download TXT
-                                </Button>
+                                {message.classification && (
+                                  <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => {
+                                      setReportMessageId(message.id);
+                                      setIsReportOpen(true);
+                                    }}
+                                    className="flex items-center gap-2"
+                                  >
+                                    <ImageIcon className="h-3 w-3" />
+                                    View Report
+                                  </Button>
+                                )}
                               </div>
                             )}
                             <p className="text-xs text-muted-foreground mt-2">
@@ -1021,6 +1068,51 @@ const Dashboard = () => {
         isOpen={isCameraOpen}
         onClose={() => setIsCameraOpen(false)}
         onCapture={handleCameraCapture}
+      />
+
+      {/* Domain Selection Dialog */}
+      <Dialog open={isDomainDialogOpen} onOpenChange={setIsDomainDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Select Image Type</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Please choose what this image represents so we can analyze it correctly.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <Button variant="default" onClick={() => startClassification('plant')} className="w-full">
+                Plants
+              </Button>
+              <Button variant="secondary" onClick={() => startClassification('livestock')} className="w-full">
+                Livestock
+              </Button>
+              <Button variant="outline" onClick={() => startClassification('fish')} className="w-full">
+                Fish
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Report Modal */}
+      <ReportModal
+        isOpen={isReportOpen}
+        onClose={() => setIsReportOpen(false)}
+        message={reportMessageId ? messages.find(m => m.id === reportMessageId) as Message : null}
+        imageUrl={(() => {
+          // Prefer attachments tied to the selected message; if not present, find latest user attachment
+          const msg = reportMessageId ? messages.find(m => m.id === reportMessageId) : null;
+          const aiIndex = msg ? messages.findIndex(m => m.id === msg.id) : -1;
+          // Scan backwards for a user message with attachments
+          for (let i = aiIndex - 1; i >= 0; i--) {
+            const m = messages[i];
+            if (m.type === 'user' && m.attachments && m.attachments.length) {
+              return m.attachments[0].url;
+            }
+          }
+          return null;
+        })()}
       />
     </div>
   );

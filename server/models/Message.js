@@ -38,7 +38,7 @@ const messageSchema = new mongoose.Schema({
   aiResponse: {
     model: {
       type: String,
-      default: 'agriclip-plantvillage-15k'
+      default: 'agriclip-original'
     },
     confidence: {
       type: Number,
