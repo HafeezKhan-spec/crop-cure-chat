@@ -3,6 +3,8 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const { authMiddleware } = require('../middleware/authMiddleware');
+const OtpCode = require('../models/OtpCode');
+const { sendOtpEmail } = require('../services/emailService');
 
 const router = express.Router();
 
@@ -12,6 +14,12 @@ const generateToken = (userId) => {
     expiresIn: '7d'
   });
 };
+
+// OTP generation removed
+
+// send-otp route removed
+
+// verify-otp route removed
 
 // @route   POST /auth/signup
 // @desc    Register a new user
@@ -138,22 +146,38 @@ router.post('/login', [
       });
     }
 
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
+    // Generate 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresInMinutes = parseInt(process.env.OTP_EXPIRY_MINUTES || '10', 10);
+    const expiresAt = new Date(Date.now() + expiresInMinutes * 60 * 1000);
 
-    // Generate token
-    const token = generateToken(user._id);
+    // Save OTP
+    await OtpCode.create({
+      userId: user._id,
+      email: user.email,
+      code: otp,
+      expiresAt,
+      used: false,
+      attempts: 0
+    });
 
-    // Return user data (without password)
-    const userData = user.getPublicProfile();
+    // Send OTP via email
+    try {
+      await sendOtpEmail(user.email, otp);
+    } catch (emailErr) {
+      console.error('Failed to send OTP email:', emailErr);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send verification code. Please try again later.'
+      });
+    }
 
     res.json({
       success: true,
-      message: 'Login successful',
+      message: 'Verification code sent to your email',
       data: {
-        user: userData,
-        token
+        otpPending: true,
+        email: user.email
       }
     });
 
@@ -163,6 +187,69 @@ router.post('/login', [
       success: false,
       message: 'Server error during login'
     });
+  }
+});
+
+// @route   POST /auth/verify-otp
+// @desc    Verify OTP and issue JWT
+// @access  Public
+router.post('/verify-otp', [
+  body('email').isEmail().withMessage('Valid email is required'),
+  body('code').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { email, code } = req.body;
+    const user = await User.findOne({ email: email.toLowerCase() });
+    if (!user) {
+      return res.status(400).json({ success: false, message: 'Invalid verification request' });
+    }
+
+    const otpRecord = await OtpCode.findOne({
+      userId: user._id,
+      email: user.email,
+      code,
+      used: false,
+      expiresAt: { $gt: new Date() }
+    }).sort({ createdAt: -1 });
+
+    if (!otpRecord) {
+      // Increment attempts on the latest record for rate limiting/hardening
+      await OtpCode.findOneAndUpdate({ userId: user._id }, { $inc: { attempts: 1 } }, { sort: { createdAt: -1 } });
+      return res.status(400).json({ success: false, message: 'Invalid or expired code' });
+    }
+
+    // Mark OTP as used
+    otpRecord.used = true;
+    await otpRecord.save();
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Issue JWT and return user profile
+    const token = generateToken(user._id);
+    const userData = user.getPublicProfile();
+
+    res.json({
+      success: true,
+      message: 'Verification successful',
+      data: {
+        user: userData,
+        token
+      }
+    });
+  } catch (error) {
+    console.error('Verify OTP error:', error);
+    res.status(500).json({ success: false, message: 'Server error during verification' });
   }
 });
 

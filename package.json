@@ -12,7 +12,9 @@
     "dev:front": "vite",
     "dev:back": "npm run dev --prefix server",
     "dev:model": "cmd /c ..\\model\\start.bat",
-    "dev:full": "concurrently -n front,back,model -c green,blue,magenta \"npm run dev:front\" \"npm run dev:back\" \"npm run dev:model\""
+    "dev:full": "concurrently -n front,back,model -c green,blue,magenta \"npm run dev:front\" \"npm run dev:back\" \"npm run dev:model\"",
+    "deploy:check": "echo 'Checking deployment readiness...' && npm run build && echo 'Frontend build successful!'",
+    "deploy:setup": "echo 'Setting up deployment files...' && echo 'Please follow DEPLOYMENT.md for complete setup instructions'"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

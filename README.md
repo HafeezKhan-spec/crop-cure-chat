@@ -1,10 +1,32 @@
-# Welcome to your Lovable project
+# AgriClip - AI-Powered Agricultural Disease Detection
 
-## Project info
+AgriClip is a comprehensive MERN stack application that uses AI to detect plant diseases from images and provides intelligent chat-based agricultural assistance.
 
-**URL**: https://lovable.dev/projects/222086ca-e127-4b99-bca7-f7890f8c8df7
+## 🚀 Features
 
-## How can I edit this code?
+- **AI Disease Detection**: Upload plant images for instant disease analysis
+- **Intelligent Chat**: Get agricultural advice through AI-powered conversations  
+- **OTP Authentication**: Secure email-based two-factor authentication
+- **User Dashboard**: Track analysis history and chat sessions
+- **Real-time Processing**: Fast image analysis with detailed recommendations
+
+## 🏗️ Architecture
+
+- **Frontend**: React + TypeScript + Vite + Tailwind CSS
+- **Backend**: Node.js + Express + MongoDB
+- **AI Model**: FastAPI + Hugging Face Transformers
+- **Authentication**: JWT + Email OTP verification
+- **Deployment**: Vercel (Frontend) + Railway (Backend + AI Model)
+
+## 📋 Quick Deployment
+
+Ready to deploy? Follow these steps:
+
+1. **Check Deployment Readiness**: `npm run deploy:check`
+2. **Follow Deployment Guide**: See [DEPLOYMENT.md](./DEPLOYMENT.md)
+3. **Use Deployment Checklist**: See [DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)
+
+## 🛠️ Development Setup
 
 There are several ways of editing your application.
 

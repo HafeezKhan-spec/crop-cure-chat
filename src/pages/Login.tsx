@@ -14,52 +14,66 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
   const navigate = useNavigate();
   const { t } = useLanguage();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleLogin = async () => {
     setIsLoading(true);
-
     try {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          identifier: email, // Can be email or username
-          password,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: email, password }),
       });
-
       const data = await response.json();
-
-      if (response.ok && data.success) {
-        // Save auth token and user info
-        localStorage.setItem("authToken", data.data.token);
-        localStorage.setItem("userName", data.data.user.username);
-        
-        toast({
-          title: t('toast.loginSuccess'),
-          description: t('toast.welcomeBack'),
-        });
-        
-        navigate("/dashboard");
+      if (response.ok && data.success && data.data?.otpPending) {
+        setOtpStep(true);
+        toast({ title: t('toast.loginSuccess'), description: t('toast.checkEmailForOtp') });
       } else {
         toast({
           title: t('toast.loginFailed'),
           description: data.message || t('toast.checkCredentials'),
-          variant: "destructive",
+          variant: 'destructive',
         });
       }
     } catch (error) {
       console.error('Login error:', error);
-      toast({
-        title: t('toast.loginFailed'),
-        description: t('toast.serverError'),
-        variant: "destructive",
+      toast({ title: t('toast.loginFailed'), description: t('toast.serverError'), variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode || otpCode.length !== 6) {
+      toast({ title: t('toast.invalidOtp'), description: t('toast.enterSixDigitCode'), variant: 'destructive' });
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/auth/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, code: otpCode }),
       });
+      const data = await response.json();
+      if (response.ok && data.success) {
+        localStorage.setItem('authToken', data.data.token);
+        localStorage.setItem('userName', data.data.user.username);
+        toast({ title: t('toast.loginSuccess'), description: t('toast.welcomeBack') });
+        navigate('/dashboard');
+      } else {
+        toast({
+          title: t('toast.otpFailed') || 'Verification failed',
+          description: data.message || t('toast.invalidOtp'),
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Verify OTP error:', error);
+      toast({ title: t('toast.otpFailed') || 'Verification failed', description: t('toast.serverError'), variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -87,7 +101,16 @@ const Login = () => {
               {t('login.enterCredentials')}
             </CardDescription>
           </CardHeader>
-          <form onSubmit={handleSubmit}>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (otpStep) {
+                handleVerifyOtp();
+              } else {
+                handleLogin();
+              }
+            }}
+          >
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">{t('login.email')}</Label>
@@ -99,6 +122,7 @@ const Login = () => {
                   onChange={(e) => setEmail(e.target.value)}
                   required
                   className="transition-all focus:ring-2 focus:ring-primary"
+                  
                 />
               </div>
               <div className="space-y-2">
@@ -120,6 +144,7 @@ const Login = () => {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     className="pr-10 transition-all focus:ring-2 focus:ring-primary"
+                    
                   />
                   <Button
                     type="button"
@@ -127,6 +152,7 @@ const Login = () => {
                     size="sm"
                     className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                     onClick={() => setShowPassword(!showPassword)}
+                    
                   >
                     {showPassword ? (
                       <EyeOff className="h-4 w-4 text-muted-foreground" />
@@ -136,6 +162,23 @@ const Login = () => {
                   </Button>
                 </div>
               </div>
+
+              {otpStep && (
+                <div className="space-y-2">
+                  <Label htmlFor="otp">{t('login.otpCode') || 'Verification Code'}</Label>
+                  <Input
+                    id="otp"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={6}
+                    placeholder="123456"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                    required
+                    className="transition-all focus:ring-2 focus:ring-primary tracking-widest"
+                  />
+                </div>
+              )}
             </CardContent>
             <CardFooter className="flex flex-col space-y-4">
               <Button
@@ -146,10 +189,10 @@ const Login = () => {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    {t('login.signingIn')}
+                    {otpStep ? (t('login.verifying') || 'Verifying') : t('login.signingIn')}
                   </>
                 ) : (
-                  t('login.signIn')
+                  otpStep ? (t('login.verifyOtp') || 'Verify Code') : t('login.signIn')
                 )}
               </Button>
               
@@ -164,7 +207,7 @@ const Login = () => {
                 </div>
               </div>
 
-              <Button variant="outline" className="w-full" type="button">
+              <Button variant="outline" className="w-full" type="button" disabled={isLoading}>
                 <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
                   <path
                     fill="currentColor"
