@@ -10,9 +10,9 @@ export default defineConfig(({ mode }) => ({
     port: 8080,
     proxy: {
       '/api': {
-        target: 'https://crop-cure-chat-backend.onrender.com',
+        target: 'http://localhost:5000',
         changeOrigin: true,
-        secure: true,
+        secure: false,
       },
     },
   },

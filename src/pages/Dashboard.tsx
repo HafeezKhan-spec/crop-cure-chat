@@ -46,6 +46,7 @@ interface Message {
   timestamp: Date;
   attachments?: { name: string; type: string; url: string }[];
   classification?: ClassificationResult;
+  domain?: 'plant' | 'livestock' | 'fish';
 }
 
 interface UploadedFile {
@@ -447,10 +448,34 @@ const Dashboard = () => {
           const statusData = await statusResponse.json();
 
           if (statusData.success && statusData.data.status === 'completed') {
-            const classification = statusData.data.classification;
+            let classification = statusData.data.classification as ClassificationResult;
             const report = statusData.data.report as string | undefined;
 
-            const analysisContent = report ? report : JSON.stringify(classification, null, 2);
+            // Compose chat content based on domain
+            let analysisContent: string;
+            if (domain === 'plant') {
+              // Prefer narrative report when available; otherwise a concise summary including plant-specific fields
+              analysisContent = report ? report : [
+                `Disease: ${classification.diseaseName}`,
+                `Confidence: ${classification.confidence}%`,
+                classification.severity ? `Severity: ${classification.severity}` : undefined,
+                typeof classification.affectedArea === 'number' ? `Affected Area: ${classification.affectedArea}%` : undefined,
+              ].filter(Boolean).join('\n');
+            } else {
+              // For livestock/fish: only show name + confidence in chat
+              analysisContent = [
+                `Name: ${classification.diseaseName}`,
+                `Confidence: ${classification.confidence}%`,
+              ].join('\n');
+
+              // Sanitize classification fields (hide plant-specific fields)
+              classification = {
+                diseaseDetected: classification.diseaseDetected,
+                diseaseName: classification.diseaseName,
+                confidence: classification.confidence,
+                // omit severity, affectedArea, recommendations
+              } as ClassificationResult;
+            }
 
             const aiResponse: Message = {
               id: (Date.now() + 2).toString(),
